@@ -1,0 +1,7 @@
+*.pem
+*.o
+.flavor
+.objs
+kore_mustach.so
+assets.h
+cert
