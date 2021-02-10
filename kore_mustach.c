@@ -1,7 +1,7 @@
 #include <kore/kore.h>
 
 #include "mustach.h"
-#include "assets.h"
+#include "kore_mustach.h"
 
 struct closure {
     struct kore_json_item   *item;
@@ -13,6 +13,8 @@ struct closure {
         struct kore_json_item   *section;
         int                     iterate;
     } stack[MUSTACH_MAX_DEPTH];
+
+    const void *(*partial_cb)(const char *);
 };
 
 static int  start(void *);
@@ -31,10 +33,6 @@ static char                     *json_get_self_value(struct kore_json_item *);
 static void     *key_for_kore_json(const char *, char **, char **);
 static int      value_is(char *, char *);
 #endif
-
-/* see tmpl.c */
-const uint8_t   *get_tmpl_item(const char *);
-int             kore_mustach(const char *, const void *, void **, size_t *);
 
 int
 start(void *closure)
@@ -236,13 +234,13 @@ int
 partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
 {
     struct closure  *cl = closure;
-	const char      *s;
+    const char      *s;
 
     sbuf->value = "";
     if (cl->item && (s = json_get_item_value(cl->item, name)) != NULL) {
         sbuf->value = s;
         sbuf->freecb = kore_free;
-    } else if ((s = (const char *)get_tmpl_item(name)) != NULL) {
+    } else if (cl->partial_cb && (s = cl->partial_cb(name)) != NULL) {
         sbuf->value = s;
     }
 
@@ -358,7 +356,7 @@ json_get_self_value(struct kore_json_item *root)
             root->name = 0;
             kore_buf_init(&buf, 1024);
             kore_json_item_tobuf(root, &buf);
-            buf.data[buf.offset] = '\0';
+            kore_buf_append(&buf, "\0", 1);
             v = (char *)kore_buf_release(&buf, &len);
             root->name = name;
             break;
@@ -419,7 +417,7 @@ value_is(char *value, char *v)
 #endif
 
 int
-kore_mustach(const char *template, const void *data, void **result, size_t *length)
+kore_mustach(const void *template, const void *data, const void *(*partial_cb)(const char *), void **result, size_t *length)
 {
     struct closure      cl = { 0 };
     struct kore_json    j;
@@ -437,8 +435,11 @@ kore_mustach(const char *template, const void *data, void **result, size_t *leng
         .stop = NULL
     };
 
+    /* used in partial */
+    cl.partial_cb = partial_cb;
+
     if (!data) {
-        r = fmustach(template, &itf, &cl, 0);
+        r = fmustach((const char *)template, &itf, &cl, 0);
         *result = kore_buf_release(&cl.buf, length);
         return (r);
     }
@@ -448,7 +449,7 @@ kore_mustach(const char *template, const void *data, void **result, size_t *leng
         cl.item = j.root;
     }
 
-    r = fmustach(template, &itf, &cl, 0);
+    r = fmustach((const char *)template, &itf, &cl, 0);
     *result = kore_buf_release(&cl.buf, length);
     kore_json_cleanup(&j);
     return (r);
