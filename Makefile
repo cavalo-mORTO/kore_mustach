@@ -8,7 +8,6 @@ SOVEREV = .0.99
 
 CFLAGS += -fPIC -Wall -Wextra
 
-lib_OBJ  = mustach.o kore_mustach.o
 HEADERS  = mustach.h kore_mustach.h
 
 lib_LDFLAGS  += -shared
@@ -31,7 +30,7 @@ uninstall:
 	rm -rf $(DESTDIR)$(INCLUDEDIR)/mustach
 
 libkore_mustach.so: mustach.o kore_mustach.o
-	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libkore_mustach.so mustach.o kore_mustach.o 
+	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libkore_mustach.so mustach.o kore_mustach.o
 
 libmustach.so$(SOVEREV): mustach.o
 	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libmustach.so$(SOVEREV) mustach.o

@@ -7,15 +7,16 @@ src=""
 
 printf -v buf "#include <kore/kore.h>
 #include <kore/http.h>
+#include <mustach/mustach.h>
 #include <mustach/kore_mustach.h>
 
 #include \"assets.h\"
 
-const void  *get_tmpl_item(const char *);
+int         get_tmpl_item(const char *, struct mustach_sbuf *);
 int         asset_serve_mustach(struct http_request *, int, const void *, const void *);
 
 static const struct tmpl {
-    const char          fname[256];
+    const char          *name;
     const void          *fp;
 } tmpl_list[] = {\n"
 src+=$buf
@@ -29,19 +30,20 @@ do
     fi
 done
 
-printf -v buf "};\n
-const void *
-get_tmpl_item(const char *fname)
+printf -v buf "};
+static const size_t tmpl_len = sizeof(tmpl_list) / sizeof(tmpl_list[0]);
+
+int
+get_tmpl_item(const char *name, struct mustach_sbuf *sbuf)
 {
-    const void *v = 0;
-    size_t  i, l = sizeof(tmpl_list) / sizeof(tmpl_list[0]);
-    for (i = 0; i < l; i++) {
-        if (!strcmp(fname, tmpl_list[i].fname)) {
-            v = tmpl_list[i].fp;
+    size_t  i;
+    for (i = 0; i < tmpl_len; i++) {
+        if (!strcmp(name, tmpl_list[i].name)) {
+            sbuf->value = tmpl_list[i].fp;
             break;
         }
     }
-    return (v);
+    return (MUSTACH_OK);
 }
 
 int
