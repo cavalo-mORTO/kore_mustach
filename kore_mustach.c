@@ -20,12 +20,10 @@
 enum comp {
 	C_no = 0,
 	C_eq = 1,
-#if !defined(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)
 	C_lt = 5,
 	C_le = 6,
 	C_gt = 9,
 	C_ge = 10
-#endif
 };
 
 struct closure {
@@ -54,10 +52,7 @@ static struct kore_json_item    *json_get_item(struct kore_json_item *, const ch
 static char                     *json_get_item_value(struct kore_json_item *, const char *);
 static char                     *json_get_self_value(struct kore_json_item *);
 static void                     *key_for_kore_json(const char *, char **, char **, enum comp *);
-
-#if !defined(NO_EQUAL_VALUE_EXTENSION_FOR_MUSTACH)
-static int      value_is(char *, char *, enum comp *);
-#endif
+static int                      value_is(char *, char *, enum comp *);
 
 int
 start(void *closure)
@@ -383,7 +378,6 @@ key_for_kore_json(const char *in, char **key, char **value, enum comp *comp)
                 *value = "*";
                 break;
 #endif
-#if !defined(NO_EQUAL_VALUE_EXTENSION_FOR_MUSTACH)
 #if !defined(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)
             case '>':
                 if (*++s == '=') {
@@ -405,6 +399,7 @@ key_for_kore_json(const char *in, char **key, char **value, enum comp *comp)
                 }
                 break;
 #endif
+#if !defined(NO_EQUAL_VALUE_EXTENSION_FOR_MUSTACH)
             case '=':
                 *comp = C_eq;
                 *value = ++s;
@@ -430,40 +425,39 @@ key_for_kore_json(const char *in, char **key, char **value, enum comp *comp)
     return (*key);
 }
 
-#if !defined(NO_EQUAL_VALUE_EXTENSION_FOR_MUSTACH)
 int
 value_is(char *value, char *v, enum comp *comp)
 {
     if (!value)
         return (0);
-    else if (!v)
+
+    if (!v)
         return (1);
-    else {
-        switch (*comp) {
-            case C_eq:
-                return (v[0] == '!' ? strcmp(value, &v[1]) : !strcmp(value, v));
 
-#if !defined(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)
-            case C_gt:
-                return (atof(value) > atof(v));
-
-            case C_ge:
-                return (atof(value) >= atof(v));
-
-            case C_lt:
-                return (atof(value) < atof(v));
-
-            case C_le:
-                return (atof(value) <= atof(v));
+    switch (*comp) {
+#if !defined(NO_EQUAL_VALUE_EXTENSION_FOR_MUSTACH)
+        case C_eq:
+            return (v[0] == '!' ? strcmp(value, &v[1]) : !strcmp(value, v));
 #endif
-            case C_no:
-                return (1);
-        }
+#if !defined(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)
+        case C_gt:
+            return (v[0] == '!' ? !(atof(value) > atof(&v[1])) : (atof(value) > atof(v)));
+
+        case C_ge:
+            return (v[0] == '!' ? !(atof(value) >= atof(&v[1])) : (atof(value) >= atof(v)));
+
+        case C_lt:
+            return (v[0] == '!' ? !(atof(value) < atof(&v[1])) : (atof(value) < atof(v)));
+
+        case C_le:
+            return (v[0] == '!' ? !(atof(value) <= atof(&v[1])) : (atof(value) <= atof(v)));
+#endif
+        case C_no:
+            return (1);
     }
 
     return (0);
 }
-#endif
 
 int
 kore_mustach(const void *template, const void *data,
