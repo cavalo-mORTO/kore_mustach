@@ -135,8 +135,10 @@ enter(void *closure, const char *name)
                 break;
 
             default:
-                if (val && (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k)))
+                if (k != C_no && val &&
+                        (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k))) {
                     goto noenter;
+                }
 
                 cl->stack[cl->depth].iterate = 0;
         }
@@ -393,7 +395,15 @@ keyval(const char *in, char **key, char **val, enum comp *k)
             case '.':
                 *o++ = '/';
                 continue;
-
+#if !defined(NO_JSON_POINTER_EXTENSION_FOR_MUSTACH)
+            case '~':
+                switch (*++s) {
+                    case '1': *o++ = '/'; break;
+                    case '0': *o++ = '~'; break;
+                    default: *o++ = *--s; break;
+                }
+                continue;
+#endif
             case '\\':
                 *o++ = *++s;
                 continue;
