@@ -311,7 +311,7 @@ json_get_self_value(struct kore_json_item *root)
             break;
 
         case KORE_JSON_TYPE_NUMBER:
-            snprintf(b, sizeof(b), "%f", root->data.number);
+            snprintf(b, sizeof(b), "%.9g", root->data.number);
             v = kore_strdup(b);
             break;
 
