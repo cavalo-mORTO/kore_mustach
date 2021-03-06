@@ -27,7 +27,7 @@ enum comp {
 };
 
 struct closure {
-    struct kore_json_item   *item;
+    struct kore_json_item   *context;
     struct kore_buf         buf;
     int                     depth;
     size_t                  depth_max;
@@ -61,7 +61,7 @@ start(void *closure)
 
     cl->depth = 0;
     cl->depth_max = sizeof(cl->stack) / sizeof(cl->stack[0]);
-    cl->stack[cl->depth].root = cl->item;
+    cl->stack[cl->depth].root = cl->context;
     cl->stack[cl->depth].iterate = 0;
 
     /* initialize our buffer with 8 kilobytes. */
@@ -74,25 +74,26 @@ int
 enter(void *closure, const char *name)
 {
     struct closure          *cl = closure;
-    struct kore_json_item   *root, *item, *n;
+    struct kore_json_item   *item, *n;
     enum comp               k;
     char                    *key, *val;
     void                    *tofree;
 
-    if (!cl->item)
+    if (!cl->context)
         return (0);
 
     if ((size_t)++cl->depth >= cl->depth_max)
         return (MUSTACH_ERROR_TOO_DEEP);
 
+    cl->stack[cl->depth].root = cl->context;
+
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
     if (name[0] == '*' && !name[1]) {
-        if (cl->item->type == KORE_JSON_TYPE_OBJECT &&
-                (n = TAILQ_FIRST(&cl->item->data.items)))
+        if (cl->context->type == KORE_JSON_TYPE_OBJECT &&
+                (n = TAILQ_FIRST(&cl->context->data.items)))
         {
-            cl->stack[cl->depth].root = cl->item;
+            cl->context = n;
             cl->stack[cl->depth].iterate = 1;
-            cl->item = n;
             return (1);
         }
 
@@ -101,9 +102,8 @@ enter(void *closure, const char *name)
     }
 #endif
 
-    root = cl->item;
     tofree = keyval(name, &key, &val, &k);
-    if ((item = json_get_item(root, key)) != NULL) {
+    if ((item = json_get_item(cl->context, key)) != NULL) {
         switch (item->type) {
             case KORE_JSON_TYPE_LITERAL:
                 if (item->data.literal != KORE_JSON_TRUE) {
@@ -116,7 +116,7 @@ enter(void *closure, const char *name)
                 if ((n = TAILQ_FIRST(&item->data.items)) == NULL) {
                     goto noenter;
                 }
-                cl->item = n;
+                cl->context = n;
                 cl->stack[cl->depth].iterate = 1;
                 break;
 
@@ -125,12 +125,12 @@ enter(void *closure, const char *name)
                 if (val && val[0] == '*' &&
                         (n = TAILQ_FIRST(&item->data.items)) != NULL)
                 {
-                    cl->item = n;
+                    cl->context = n;
                     cl->stack[cl->depth].iterate = 1;
                     break;
                 }
 #endif
-                cl->item = item;
+                cl->context = item;
                 cl->stack[cl->depth].iterate = 0;
                 break;
 
@@ -139,10 +139,10 @@ enter(void *closure, const char *name)
                         (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k))) {
                     goto noenter;
                 }
+                if (k == C_no) cl->context = item;
                 cl->stack[cl->depth].iterate = 0;
         }
 
-        cl->stack[cl->depth].root = root;
         kore_free(tofree);
         return (1);
     }
@@ -158,7 +158,7 @@ leave(void *closure)
 {
     struct closure          *cl = closure;
 
-    cl->item = cl->stack[cl->depth].root;
+    cl->context = cl->stack[cl->depth].root;
     if (--cl->depth <= 0)
         return (MUSTACH_ERROR_CLOSING);
 
@@ -172,9 +172,9 @@ next(void *closure)
     struct kore_json_item   *n;
 
     if (cl->stack[cl->depth].iterate &&
-            (n = TAILQ_NEXT(cl->item, list)))
+            (n = TAILQ_NEXT(cl->context, list)))
     {
-        cl->item = n;
+        cl->context = n;
         return (1);
     }
     return (0);
@@ -190,19 +190,19 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     void                    *tofree;
 
     sbuf->value = "";
-    if (!cl->item)
+    if (!cl->context)
         return (MUSTACH_OK);
 
     switch (name[0]) {
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
         case '*':
-            if (cl->item->name)
-                sbuf->value = cl->item->name;
+            if (cl->context->name)
+                sbuf->value = cl->context->name;
             break;
 #endif
 #if !defined(NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH)
         case '.':
-            if ((value = json_get_self_value(cl->item)) != NULL) {
+            if ((value = json_get_self_value(cl->context)) != NULL) {
                 sbuf->value = value;
                 sbuf->freecb = kore_free;
             }
@@ -210,7 +210,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 #endif
         default:
             tofree = keyval(name, &key, &val, &k);
-            if ((item = json_get_item(cl->item, key)) &&
+            if ((item = json_get_item(cl->context, key)) &&
                     ((val && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
                     (value = json_get_self_value(item)))
             {
@@ -231,7 +231,7 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
     const char      *s;
 
     sbuf->value = "";
-    if (cl->item && (item = json_get_item(cl->item, name)) &&
+    if (cl->context && (item = json_get_item(cl->context, name)) &&
             (s = json_get_self_value(item))) {
         sbuf->value = s;
         sbuf->freecb = kore_free;
@@ -270,7 +270,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
 }
         
 struct kore_json_item *
-json_get_item(struct kore_json_item *root, const char *name)
+json_get_item(struct kore_json_item *o, const char *name)
 {
     struct kore_json_item   *item = NULL;
     int                     type;
@@ -281,7 +281,7 @@ json_get_item(struct kore_json_item *root, const char *name)
     for (type = KORE_JSON_TYPE_OBJECT;
             type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2)
     {
-        if ((item = kore_json_find(root, name, type)))
+        if ((item = kore_json_find(o, name, type)))
             break;
     }
 
@@ -289,51 +289,49 @@ json_get_item(struct kore_json_item *root, const char *name)
 }
 
 char *
-json_get_self_value(struct kore_json_item *root)
+json_get_self_value(struct kore_json_item *o)
 {
     size_t          len;
     char            b[256], *name, *v = 0;
     struct kore_buf buf;
    
-    switch (root->type) {
+    switch (o->type) {
         case KORE_JSON_TYPE_STRING:
-            v = kore_strdup(root->data.string);
+            v = kore_strdup(o->data.string);
             break;
 
         case KORE_JSON_TYPE_NUMBER:
-            snprintf(b, sizeof(b), "%.9g", root->data.number);
+            snprintf(b, sizeof(b), "%.9g", o->data.number);
             v = kore_strdup(b);
             break;
 
         case KORE_JSON_TYPE_LITERAL:
-            if (root->data.literal == KORE_JSON_TRUE)
+            if (o->data.literal == KORE_JSON_TRUE)
                 v = kore_strdup("true");
-            else if (root->data.literal == KORE_JSON_FALSE)
+            else if (o->data.literal == KORE_JSON_FALSE)
                 v = kore_strdup("false");
             else
                 v = kore_strdup("null");
             break;
 
         case KORE_JSON_TYPE_INTEGER:
-            snprintf(b, sizeof(b), "%ld", root->data.s64);
+            snprintf(b, sizeof(b), "%ld", o->data.s64);
             v = kore_strdup(b);
             break;
 
         case KORE_JSON_TYPE_INTEGER_U64:
-            snprintf(b, sizeof(b), "%lu", root->data.u64);
+            snprintf(b, sizeof(b), "%lu", o->data.u64);
             v = kore_strdup(b);
             break;
 
-        case KORE_JSON_TYPE_OBJECT:
-        case KORE_JSON_TYPE_ARRAY:
-            name = root->name;
-            root->name = 0;
+        default:
+            name = o->name;
+            o->name = 0;
             kore_buf_init(&buf, 1024);
-            kore_json_item_tobuf(root, &buf);
+            kore_json_item_tobuf(o, &buf);
             kore_buf_append(&buf, "\0", 1);
             v = (char *)kore_buf_release(&buf, &len);
-            root->name = name;
-            break;
+            o->name = name;
     }
 
     return (v);
@@ -482,7 +480,7 @@ kore_mustach(const void *template, const void *data,
 
     kore_json_init(&j, data, strlen(data));
     if (kore_json_parse(&j)) {
-        cl.item = j.root;
+        cl.context = j.root;
     } else {
         kore_log(LOG_NOTICE, "%s", kore_json_strerror(&j));
     }
