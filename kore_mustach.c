@@ -139,7 +139,6 @@ enter(void *closure, const char *name)
                         (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k))) {
                     goto noenter;
                 }
-
                 cl->stack[cl->depth].iterate = 0;
         }
 
@@ -274,24 +273,15 @@ struct kore_json_item *
 json_get_item(struct kore_json_item *root, const char *name)
 {
     struct kore_json_item   *item = NULL;
-    size_t  i, l;
-
-    int types[] = {
-        KORE_JSON_TYPE_OBJECT,
-        KORE_JSON_TYPE_ARRAY,
-        KORE_JSON_TYPE_STRING,
-        KORE_JSON_TYPE_NUMBER,
-        KORE_JSON_TYPE_LITERAL,
-        KORE_JSON_TYPE_INTEGER,
-        KORE_JSON_TYPE_INTEGER_U64,
-    };
-    l = sizeof(types) / sizeof(types[0]);
+    int                     type;
 
     if (!name)
         return (0);
 
-    for (i = 0; i < l; i++) {
-        if ((item = kore_json_find(root, name, types[i])) != NULL)
+    for (type = KORE_JSON_TYPE_OBJECT;
+            type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2)
+    {
+        if ((item = kore_json_find(root, name, type)))
             break;
     }
 
@@ -392,9 +382,6 @@ keyval(const char *in, char **key, char **val, enum comp *k)
                 *val = ++s;
                 break;
 #endif
-            case '.':
-                *o++ = '/';
-                continue;
 #if !defined(NO_JSON_POINTER_EXTENSION_FOR_MUSTACH)
             case '~':
                 switch (*++s) {
@@ -404,6 +391,10 @@ keyval(const char *in, char **key, char **val, enum comp *k)
                 }
                 continue;
 #endif
+            case '.':
+                *o++ = '/';
+                continue;
+
             case '\\':
                 *o++ = *++s;
                 continue;
