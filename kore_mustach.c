@@ -239,7 +239,7 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
         return (cl->partial_cb(name, sbuf));
     }
 
-	return (MUSTACH_OK);
+    return (MUSTACH_OK);
 }
 
 int
