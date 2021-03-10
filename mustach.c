@@ -216,6 +216,16 @@ static int iwrap_partial(void *closure, const char *name, struct mustach_sbuf *s
 	return rc;
 }
 
+
+static int iwrap_lambda(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file)
+{
+	struct iwrap *iwrap = closure;
+
+    iwrap->emit(iwrap->closure, buffer, size, escape, file);
+
+    return MUSTACH_OK;
+}
+
 static int process(const char *template, struct iwrap *iwrap, FILE *file, const char *opstr, const char *clstr)
 {
 	struct mustach_sbuf sbuf;
@@ -368,6 +378,35 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 			}
 			break;
 		default:
+            /* lambdas */
+            if (enabled && name[0] && name[1] && name[0] == '(' && name[1] == ')') {
+                beg = template;
+                while ((beg = strstr(beg, opstr))) {
+                    term = beg;
+                    beg += oplen;
+                    while (isspace(*beg)) beg++;
+
+                    if (memcmp(beg, name, len))
+                        continue;
+
+                    rc = iwrap_lambda(iwrap, name, template, (size_t)(term - template), 0, file);
+                    if (rc < 0)
+                        return (rc);
+
+                    term = strstr(beg, clstr);
+                    if (term == NULL)
+                        return MUSTACH_ERROR_UNEXPECTED_END;
+
+                    template = term + cllen;
+                    break;
+                }
+
+                if (beg == NULL)
+                    return MUSTACH_ERROR_UNEXPECTED_END;
+
+                break;
+            }
+
 			/* replacement */
 			if (enabled) {
 				rc = iwrap->put(iwrap->closure_put, name, c != '&', file);
