@@ -1,4 +1,5 @@
 #include <kore/kore.h>
+#include <ctype.h>
 #include "mustach.h"
 #include "kore_mustach.h"
 
@@ -38,6 +39,7 @@ struct closure {
     } stack[MUSTACH_MAX_DEPTH];
 
     int     (*partial_cb)(const char *, struct mustach_sbuf *);
+    int     (*lambda_cb)(const char *, struct kore_buf *);
 };
 
 static int  start(void *);
@@ -47,6 +49,7 @@ static int  next(void *);
 static int  get(void *, const char *, struct mustach_sbuf *);
 static int  partial(void *, const char *, struct mustach_sbuf *);
 static int  emit(void *, const char *, size_t, int, FILE *);
+static int  lambda(void *, const char *, const char *, size_t, int, FILE *);
 
 static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *);
 static char                     *json_get_self_value(struct kore_json_item *);
@@ -101,7 +104,6 @@ enter(void *closure, const char *name)
         return (0);
     }
 #endif
-
     tofree = keyval(name, &key, &val, &k);
     if ((item = json_get_item(cl->context, key)) != NULL) {
         switch (item->type) {
@@ -266,6 +268,24 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
     } else {
         kore_buf_append(&cl->buf, buffer, size);
     }
+    return (MUSTACH_OK);
+}
+
+int
+lambda(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file)
+{
+    struct closure  *cl = closure;
+    struct kore_buf b;
+
+    kore_buf_init(&b, size + 1);
+    kore_buf_append(&b, buffer, size);
+
+    if (cl->lambda_cb)
+        cl->lambda_cb(name, &b);
+
+    emit(closure, (const char *)b.data, b.offset, escape, file);
+    kore_buf_cleanup(&b);
+
     return (MUSTACH_OK);
 }
         
@@ -451,7 +471,9 @@ evalcomp(struct kore_json_item *o, const char *value, enum comp k)
 
 int
 kore_mustach(const void *template, const void *data,
-        int (*partial_cb)(const char *, struct mustach_sbuf *), void **result, size_t *length)
+        int (*partial_cb)(const char *, struct mustach_sbuf *), 
+        int (*lambda_cb)(const char *, struct kore_buf *), 
+        void **result, size_t *length)
 {
     struct closure      cl = { 0 };
     struct kore_json    j;
@@ -466,11 +488,15 @@ kore_mustach(const void *template, const void *data,
         .partial = partial,
         .get = get,
         .emit = emit,
+        .lambda = lambda,
         .stop = NULL
     };
 
     /* used in partial */
     cl.partial_cb = partial_cb;
+
+    /* used in lambda */
+    cl.lambda_cb = lambda_cb;
 
     if (!data) {
         r = fmustach(template, &itf, &cl, 0);

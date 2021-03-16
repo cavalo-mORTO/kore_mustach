@@ -41,6 +41,7 @@ struct iwrap {
 	int (*get)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	int (*partial)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	void *closure_partial; /* closure for partial */
+    int (*lambda)(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file);
 };
 
 #if !defined(NO_OPEN_MEMSTREAM)
@@ -216,16 +217,6 @@ static int iwrap_partial(void *closure, const char *name, struct mustach_sbuf *s
 	return rc;
 }
 
-
-static int iwrap_lambda(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file)
-{
-	struct iwrap *iwrap = closure;
-
-    iwrap->emit(iwrap->closure, buffer, size, escape, file);
-
-    return MUSTACH_OK;
-}
-
 static int process(const char *template, struct iwrap *iwrap, FILE *file, const char *opstr, const char *clstr)
 {
 	struct mustach_sbuf sbuf;
@@ -378,10 +369,10 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 			}
 			break;
 		default:
-            /* lambdas */
+            /* lambda */
             if (enabled && name[0] && name[1] && name[0] == '(' && name[1] == ')') {
                 beg = template;
-                while ((beg = strstr(beg, opstr))) {
+                while ((beg = strstr(beg, opstr)) != NULL) {
                     term = beg;
                     beg += oplen;
                     while (isspace(*beg)) beg++;
@@ -389,7 +380,11 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
                     if (memcmp(beg, name, len))
                         continue;
 
-                    rc = iwrap_lambda(iwrap, name, template, (size_t)(term - template), 0, file);
+                    if (iwrap->lambda)
+                        rc = iwrap->lambda(iwrap->closure, &name[2], template, (size_t)(term - template), c != '&', file);
+                    else
+                        rc = iwrap->emit(iwrap->closure, template, (size_t)(term - template), c != '&', file);
+
                     if (rc < 0)
                         return (rc);
 
@@ -451,6 +446,7 @@ int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE 
 	iwrap.next = itf->next;
 	iwrap.leave = itf->leave;
 	iwrap.get = itf->get;
+    iwrap.lambda = itf->lambda;
 
 	/* process */
 	rc = itf->start ? itf->start(closure) : 0;

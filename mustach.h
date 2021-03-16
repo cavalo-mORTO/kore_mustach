@@ -133,6 +133,7 @@ struct mustach_itf {
 	int (*partial)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	int (*emit)(void *closure, const char *buffer, size_t size, int escape, FILE *file);
 	int (*get)(void *closure, const char *name, struct mustach_sbuf *sbuf);
+    int (*lambda)(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file);
 	void (*stop)(void *closure, int status);
 };
 

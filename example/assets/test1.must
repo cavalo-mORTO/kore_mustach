@@ -41,16 +41,3 @@ end
 {{:\=equal}}
 {{::colon}}
 {{:\>greater}}
-
-{{   ()bla     }}
-this is a lambda
-closing lambda
-{{ ()bla  }}
-
-{{(bla}}
-not lambda
-{{(bla}}
-
-{{#repo}}
-  <b>{{name}}</b> reviewers:{{#who}} {{reviewer}}{{/who}} commiters:{{#who}} {{commiter}}{{/who}}
-{{/repo}}
