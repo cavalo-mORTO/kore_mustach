@@ -28,6 +28,8 @@
 # define NO_COLON_EXTENSION_FOR_MUSTACH
 # undef  NO_ALLOW_EMPTY_TAG
 # define NO_ALLOW_EMPTY_TAG
+# undef  NO_LAMBDA_EXTENSION_FOR_MUSTACH
+# define NO_LAMBDA_EXTENSION_FOR_MUSTACH
 #endif
 
 struct iwrap {
@@ -369,6 +371,7 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 			}
 			break;
 		default:
+#if !defined(NO_LAMBDA_EXTENSION_FOR_MUSTACH)
             /* lambda */
             if (enabled && name[0] && name[1] && name[0] == '(' && name[1] == ')') {
                 beg = template;
@@ -388,8 +391,7 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
                     if (rc < 0)
                         return (rc);
 
-                    term = strstr(beg, clstr);
-                    if (term == NULL)
+                    if ((term = strstr(beg, clstr)) == NULL)
                         return MUSTACH_ERROR_UNEXPECTED_END;
 
                     template = term + cllen;
@@ -401,7 +403,7 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 
                 break;
             }
-
+#endif
 			/* replacement */
 			if (enabled) {
 				rc = iwrap->put(iwrap->closure_put, name, c != '&', file);
@@ -446,7 +448,11 @@ int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE 
 	iwrap.next = itf->next;
 	iwrap.leave = itf->leave;
 	iwrap.get = itf->get;
+#if !defined(NO_LAMBDA_EXTENSION_FOR_MUSTACH)
     iwrap.lambda = itf->lambda;
+#else
+    iwrap.lambda = NULL;
+#endif
 
 	/* process */
 	rc = itf->start ? itf->start(closure) : 0;

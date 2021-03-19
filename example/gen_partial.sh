@@ -51,10 +51,10 @@ partial_cb(const char *name, struct mustach_sbuf *sbuf)
 int
 asset_serve_mustach(struct http_request *req, int status, const void *template, const void *data)
 {
-    void    *result;
+    char    *result;
     size_t  len;
 
-    kore_mustach(template, data, partial_cb, NULL, &result, &len);
+    kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
     http_response(req, status, result, len);
     kore_free(result);
 

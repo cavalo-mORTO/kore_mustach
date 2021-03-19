@@ -13,9 +13,6 @@ static const struct {
     const void          *fp;
 } partials[] = {
 	{ "assets/hello.html", asset_hello_html },
-	{ "assets/lambda.must", asset_lambda_must },
-	{ "assets/special.must", asset_special_must },
-	{ "assets/special.mustache", asset_special_mustache },
 	{ "assets/test1.json", asset_test1_json },
 	{ "assets/test1.must", asset_test1_must },
 	{ "assets/test1.ref", asset_test1_ref },
@@ -29,7 +26,6 @@ static const struct {
 	{ "assets/test4.must", asset_test4_must },
 	{ "assets/test4.ref", asset_test4_ref },
 	{ "assets/test5_2.must", asset_test5_2_must },
-	{ "assets/test5_2.mustache", asset_test5_2_mustache },
 	{ "assets/test5_3.mustache", asset_test5_3_mustache },
 	{ "assets/test5.json", asset_test5_json },
 	{ "assets/test5.must", asset_test5_must },
@@ -59,10 +55,10 @@ partial_cb(const char *name, struct mustach_sbuf *sbuf)
 int
 asset_serve_mustach(struct http_request *req, int status, const void *template, const void *data)
 {
-    void    *result;
+    char    *result;
     size_t  len;
 
-    kore_mustach(template, data, partial_cb, NULL, &result, &len);
+    kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
     http_response(req, status, result, len);
     kore_free(result);
 

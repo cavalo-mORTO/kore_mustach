@@ -1,3 +1,0 @@
-<p>{{ ()upper }} this sentence was lowercase. {{ ()upper }}</p>
-<p>{{ ()lower }} THIS SENTENCE WAS UPPERCASE. {{ ()lower }}</p>
-<p>{{ ()bla }} THIS SENTENCE WAS UPPERCASE. {{ ()bla }}</p>

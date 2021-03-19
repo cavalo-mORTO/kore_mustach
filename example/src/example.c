@@ -16,11 +16,11 @@ int     test3(struct http_request *);
 int     test4(struct http_request *);
 int     test5(struct http_request *);
 int     test6(struct http_request *);
-int     lambda(struct http_request *);
 
 int     lambda_cb(const char *, struct kore_buf *);
 int     upper(struct kore_buf *);
 int     lower(struct kore_buf *);
+int     topipe(struct kore_buf *);
 
 int
 page(struct http_request *req)
@@ -63,19 +63,15 @@ test5(struct http_request *req)
 int
 test6(struct http_request *req)
 {
-    return (asset_serve_mustach(req, 200, asset_test6_must, asset_test6_json));
-}
-
-int
-lambda(struct http_request *req)
-{
-    void    *result;
+    char    *result;
     size_t  len;
 
-    kore_mustach(asset_lambda_must, NULL, partial_cb, lambda_cb, &result, &len);
-    http_response(req, 200, result, len);
+    kore_mustach((const char *)asset_test6_must, (const char *)asset_test6_json,
+            partial_cb, lambda_cb, &result, &len);
 
+    http_response(req, 200, result, len);
     kore_free(result);
+
     return (KORE_RESULT_OK);
 }
 
@@ -88,6 +84,7 @@ lambda_cb(const char *name, struct kore_buf *b)
     } lambdas[] = {
         { "upper", upper },
         { "lower", lower },
+        { "topipe", topipe },
         { NULL, NULL },
     };
 
@@ -118,5 +115,12 @@ lower(struct kore_buf *b)
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = tolower(*c);
+    return (KORE_RESULT_OK);
+}
+
+int
+topipe(struct kore_buf *b)
+{
+    kore_buf_replace_string(b, " ", "|", 1);
     return (KORE_RESULT_OK);
 }
