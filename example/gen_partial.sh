@@ -1,7 +1,7 @@
 #!/bin/bash -f
 dir="assets"
 
-printf "Generating tmpl...\n"
+printf "Generating partials...\n"
 
 src=""
 
@@ -12,13 +12,13 @@ printf -v buf "#include <kore/kore.h>
 
 #include \"assets.h\"
 
-int         get_tmpl_item(const char *, struct mustach_sbuf *);
+int         partial_cb(const char *, struct mustach_sbuf *);
 int         asset_serve_mustach(struct http_request *, int, const void *, const void *);
 
-static const struct tmpl {
+static const struct {
     const char          *name;
     const void          *fp;
-} tmpl_list[] = {\n"
+} partials[] = {\n"
 src+=$buf
 
 for file in `ls $dir`
@@ -30,18 +30,20 @@ do
     fi
 done
 
-printf -v buf "};
-static const size_t tmpl_len = sizeof(tmpl_list) / sizeof(tmpl_list[0]);
+printf -v buf "\t{ NULL, NULL }\n};
 
 int
-get_tmpl_item(const char *name, struct mustach_sbuf *sbuf)
+partial_cb(const char *name, struct mustach_sbuf *sbuf)
 {
-    size_t  i;
-    for (i = 0; i < tmpl_len; i++) {
-        if (!strcmp(name, tmpl_list[i].name)) {
-            sbuf->value = tmpl_list[i].fp;
+    size_t  i = 0;
+
+    sbuf->value = \"\";
+    while (partials[i].name && partials[i].fp) {
+        if (!strcmp(name, partials[i].name)) {
+            sbuf->value = partials[i].fp;
             break;
         }
+        i++;
     }
     return (MUSTACH_OK);
 }
@@ -49,17 +51,17 @@ get_tmpl_item(const char *name, struct mustach_sbuf *sbuf)
 int
 asset_serve_mustach(struct http_request *req, int status, const void *template, const void *data)
 {
-    void    *r;
-    size_t  l;
+    char    *result;
+    size_t  len;
 
-    kore_mustach(template, data, get_tmpl_item, &r, &l);
-    http_response(req, status, r, l);
+    kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
+    http_response(req, status, result, len);
+    kore_free(result);
 
-    kore_free(r);
     return (KORE_RESULT_OK);
 }";
 
 src+=$buf
 
-printf "Writing tmpl to src/tmpl.c\n"
-printf "%s" "$src" > src/tmpl.c
+printf "Writing asset to src/partials.c\n"
+printf "%s" "$src" > src/partials.c
