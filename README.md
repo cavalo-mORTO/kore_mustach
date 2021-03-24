@@ -29,7 +29,7 @@ Then run
 ```
 to link your assets/* with their respective file names.
 
-## Lambda implementation
+## Integration with TinyExpr
 
-This implementation includes support for lambdas.
-A lambda name must be prefixed by '()' in the mustache tag.
+This implementation includes support for [TinyExpr](https://github.com/codeplea/tinyexpr).
+Just put your expression in the mustache tag.

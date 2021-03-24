@@ -25,7 +25,10 @@ int     topipe(struct kore_buf *);
 int
 page(struct http_request *req)
 {
-    const char  *json = "{\"hello\": \"hello world\", \"msg\": \"This is an integration of mustache templates with kore.\"}";
+    const char  *json = "{\"hello\": \"hello world\","
+        "\"msg\": \"This is an integration of mustache templates with kore.\","
+        "\"literal\": true,"
+        "\"num\": 234.43}";
 
     return (asset_serve_mustach(req, 200, asset_hello_html, json));
 }

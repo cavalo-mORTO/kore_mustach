@@ -10,7 +10,7 @@ CFLAGS += -fPIC -Wall -Wextra
 
 HEADERS  = mustach.h kore_mustach.h
 
-lib_LDFLAGS  += -shared
+lib_LDFLAGS  += -shared -lm
 
 all: libmustach.so$(SOVEREV) libkore_mustach.so
 
@@ -29,14 +29,15 @@ uninstall:
 	rm -f $(DESTDIR)$(LIBDIR)/libkore_mustach.so
 	rm -rf $(DESTDIR)$(INCLUDEDIR)/mustach
 
-libkore_mustach.so: mustach.o kore_mustach.o
-	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libkore_mustach.so mustach.o kore_mustach.o
+libkore_mustach.so: mustach.o kore_mustach.o tinyexpr.o
+	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libkore_mustach.so mustach.o kore_mustach.o tinyexpr.o
 
 libmustach.so$(SOVEREV): mustach.o
 	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libmustach.so$(SOVEREV) mustach.o
 
 mustach.o:      mustach.h
-kore_mustach.o: mustach.h kore_mustach.h
+kore_mustach.o: mustach.h kore_mustach.h tinyexpr.h
+tinyexpr.o:		tinyexpr.h
 
 clean:
 	rm -f libkore_mustach.so libmustach.so$(SOVEREV) *.o

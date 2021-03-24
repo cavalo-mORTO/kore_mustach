@@ -29,5 +29,6 @@ int kore_mustach(const char *template, const char *data,
  *             @see kore_buf.
  *
  *             A lambda name must be prefixed by '()' in the mustache tag.
+ *             To be available in the future, maybe.
  */
 #endif

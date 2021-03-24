@@ -28,8 +28,6 @@
 # define NO_COLON_EXTENSION_FOR_MUSTACH
 # undef  NO_ALLOW_EMPTY_TAG
 # define NO_ALLOW_EMPTY_TAG
-# undef  NO_LAMBDA_EXTENSION_FOR_MUSTACH
-# define NO_LAMBDA_EXTENSION_FOR_MUSTACH
 #endif
 
 struct iwrap {
@@ -43,7 +41,6 @@ struct iwrap {
 	int (*get)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	int (*partial)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	void *closure_partial; /* closure for partial */
-    int (*lambda)(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file);
 };
 
 #if !defined(NO_OPEN_MEMSTREAM)
@@ -371,39 +368,6 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 			}
 			break;
 		default:
-#if !defined(NO_LAMBDA_EXTENSION_FOR_MUSTACH)
-            /* lambda */
-            if (enabled && name[0] && name[1] && name[0] == '(' && name[1] == ')') {
-                beg = template;
-                while ((beg = strstr(beg, opstr)) != NULL) {
-                    term = beg;
-                    beg += oplen;
-                    while (isspace(*beg)) beg++;
-
-                    if (memcmp(beg, name, len))
-                        continue;
-
-                    if (iwrap->lambda)
-                        rc = iwrap->lambda(iwrap->closure, &name[2], template, (size_t)(term - template), c != '&', file);
-                    else
-                        rc = iwrap->emit(iwrap->closure, template, (size_t)(term - template), c != '&', file);
-
-                    if (rc < 0)
-                        return (rc);
-
-                    if ((term = strstr(beg, clstr)) == NULL)
-                        return MUSTACH_ERROR_UNEXPECTED_END;
-
-                    template = term + cllen;
-                    break;
-                }
-
-                if (beg == NULL)
-                    return MUSTACH_ERROR_UNEXPECTED_END;
-
-                break;
-            }
-#endif
 			/* replacement */
 			if (enabled) {
 				rc = iwrap->put(iwrap->closure_put, name, c != '&', file);
@@ -448,11 +412,6 @@ int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE 
 	iwrap.next = itf->next;
 	iwrap.leave = itf->leave;
 	iwrap.get = itf->get;
-#if !defined(NO_LAMBDA_EXTENSION_FOR_MUSTACH)
-    iwrap.lambda = itf->lambda;
-#else
-    iwrap.lambda = NULL;
-#endif
 
 	/* process */
 	rc = itf->start ? itf->start(closure) : 0;

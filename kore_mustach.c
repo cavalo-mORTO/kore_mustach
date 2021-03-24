@@ -1,6 +1,12 @@
+#define _GNU_SOURCE
+
+#include <math.h>
+#include <ctype.h>
 #include <kore/kore.h>
+#include "tinyexpr.h"
 #include "mustach.h"
 #include "kore_mustach.h"
+
 
 #if defined(NO_EXTENSION_FOR_MUSTACH)
 # undef  NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH
@@ -52,9 +58,11 @@ static int  lambda(void *, const char *, const char *, size_t, int, FILE *);
 
 static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *);
 static char                     *json_get_self_value(struct kore_json_item *);
-static void                     *keyval(const char *, char **, char **, enum comp *);
+static void                     keyval(char *, char **, enum comp *);
 static int                      compare(struct kore_json_item *, const char *);
 static int                      evalcomp(struct kore_json_item *, const char *, enum comp);
+static int                      split_string_pbrk(char *, const char *, char **, size_t);
+static double                   eval(struct kore_json_item *, const char *);
 
 static struct mustach_itf itf = {
     .start = start,
@@ -65,7 +73,6 @@ static struct mustach_itf itf = {
     .partial = partial,
     .get = get,
     .emit = emit,
-    .lambda = lambda,
     .stop = NULL
 };
 
@@ -91,8 +98,7 @@ enter(void *closure, const char *name)
     struct closure          *cl = closure;
     struct kore_json_item   *item, *n;
     enum comp               k;
-    char                    *key, *val;
-    void                    *tofree;
+    char                    key[MUSTACH_MAX_LENGTH], *val;
 
     if (!cl->context)
         return (0);
@@ -116,19 +122,22 @@ enter(void *closure, const char *name)
         return (0);
     }
 #endif
-    tofree = keyval(name, &key, &val, &k);
+    kore_strlcpy(key, name, sizeof(key));
+    keyval(key, &val, &k);
     if ((item = json_get_item(cl->context, key)) != NULL) {
         switch (item->type) {
             case KORE_JSON_TYPE_LITERAL:
                 if (item->data.literal != KORE_JSON_TRUE) {
-                    goto noenter;
+                    cl->depth--;
+                    return (0);
                 }
                 cl->stack[cl->depth].iterate = 0;
                 break;
 
             case KORE_JSON_TYPE_ARRAY:
                 if ((n = TAILQ_FIRST(&item->data.items)) == NULL) {
-                    goto noenter;
+                    cl->depth--;
+                    return (0);
                 }
                 cl->context = n;
                 cl->stack[cl->depth].iterate = 1;
@@ -151,18 +160,16 @@ enter(void *closure, const char *name)
             default:
                 if (k != C_no && val &&
                         (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k))) {
-                    goto noenter;
+                    cl->depth--;
+                    return (0);
                 }
                 if (k == C_no) cl->context = item;
                 cl->stack[cl->depth].iterate = 0;
         }
 
-        kore_free(tofree);
         return (1);
     }
 
-noenter:
-    kore_free(tofree);
     cl->depth--;
     return (0);
 }
@@ -200,8 +207,8 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     struct closure          *cl = closure;
     struct kore_json_item   *item;
     enum comp               k;
-    char                    *key, *val, *value;
-    void                    *tofree;
+    char                    *val, *value, key[MUSTACH_MAX_LENGTH];
+    double                  d;
 
     sbuf->value = "";
     if (!cl->context)
@@ -223,15 +230,22 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
             break;
 #endif
         default:
-            tofree = keyval(name, &key, &val, &k);
+            kore_strlcpy(key, name, sizeof(key));
+            keyval(key, &val, &k);
             if ((item = json_get_item(cl->context, key)) &&
                     ((val && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
-                    (value = json_get_self_value(item)))
+                    (value = json_get_self_value(item)) != NULL)
             {
                 sbuf->value = value;
                 sbuf->freecb = kore_free;
+                break;
             }
-            kore_free(tofree);
+
+            d = eval(cl->context, name);
+            if (!isnan(d) && asprintf(&value, "%.9g", d) > -1 ) {
+                sbuf->value = value;
+                sbuf->freecb = free;
+            }
     }
 
     return (MUSTACH_OK);
@@ -323,81 +337,56 @@ lambda(void *closure, const char *name, const char *buffer, size_t size, int esc
 struct kore_json_item *
 json_get_item(struct kore_json_item *o, const char *name)
 {
-    struct kore_json_item   *item = NULL;
+    struct kore_json_item   *item;
     int                     type;
 
     if (!name)
         return (NULL);
 
     for (type = KORE_JSON_TYPE_OBJECT;
-            type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2)
-    {
+            type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2) {
         if ((item = kore_json_find(o, name, type)) != NULL)
-            break;
+            return (item);
     }
 
-    return (item);
+    return (NULL);
 }
 
 char *
 json_get_self_value(struct kore_json_item *o)
 {
     size_t          len;
-    char            b[256], *name, *v = NULL;
+    char            b[256], *name;
     struct kore_buf buf;
    
     switch (o->type) {
         case KORE_JSON_TYPE_STRING:
-            v = kore_strdup(o->data.string);
-            break;
+            return (kore_strdup(o->data.string));
 
         case KORE_JSON_TYPE_NUMBER:
             snprintf(b, sizeof(b), "%.9g", o->data.number);
-            v = kore_strdup(b);
-            break;
-
-        case KORE_JSON_TYPE_LITERAL:
-            if (o->data.literal == KORE_JSON_TRUE)
-                v = kore_strdup("true");
-            else if (o->data.literal == KORE_JSON_FALSE)
-                v = kore_strdup("false");
-            else
-                v = kore_strdup("null");
-            break;
-
-        case KORE_JSON_TYPE_INTEGER:
-            snprintf(b, sizeof(b), "%ld", o->data.s64);
-            v = kore_strdup(b);
-            break;
-
-        case KORE_JSON_TYPE_INTEGER_U64:
-            snprintf(b, sizeof(b), "%lu", o->data.u64);
-            v = kore_strdup(b);
-            break;
+            return (kore_strdup(b));
 
         default:
             name = o->name;
-            o->name = 0;
+            o->name = NULL;
             kore_buf_init(&buf, 1024);
             kore_json_item_tobuf(o, &buf);
             kore_buf_append(&buf, "\0", 1);
-            v = (char *)kore_buf_release(&buf, &len);
             o->name = name;
+            return ((char *)kore_buf_release(&buf, &len));
     }
-
-    return (v);
 }
 
-void *
-keyval(const char *in, char **key, char **val, enum comp *k)
+void
+keyval(char *key, char **val, enum comp *k)
 {
     char    *s, *o;
 
-    *key = kore_strdup(in);
-    *val = 0;
+    *val = NULL;
     *k = C_no;
 
-    for (o = s = *key; *s != '\0'; s++) {
+    for (o = s = key; *s != '\0'; s++) {
         switch (*s) {
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
             case '*':
@@ -455,9 +444,6 @@ keyval(const char *in, char **key, char **val, enum comp *k)
         break;
     }
     *o = '\0';
-
-    /* free this */
-    return (*key);
 }
 
 int
@@ -475,29 +461,103 @@ compare(struct kore_json_item *o, const char *value)
 
         case KORE_JSON_TYPE_STRING:
             return (strcmp(o->data.string, value));
-    }
 
-    return (0);
+        default: return (0);
+    }
 }
 
 int
 evalcomp(struct kore_json_item *o, const char *value, enum comp k)
 {
-    int     r, c;
+    int c;
 
     c = compare(o, value);
     switch (k) {
-        case C_eq: r = c == 0; break;
+        case C_eq: return (c == 0);
 #if !defined(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)
-        case C_lt: r = c < 0; break;
-        case C_le: r = c <= 0; break;
-        case C_gt: r = c > 0; break;
-        case C_ge: r = c >= 0; break;
+        case C_lt: return (c < 0);
+        case C_le: return (c <= 0);
+        case C_gt: return (c > 0);
+        case C_ge: return (c >= 0);
 #endif
-        default: r = 0; break;
+        default: return (0);
+    }
+}
+
+int
+split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
+{
+	int         count;
+	char        **ap;
+
+	if (ele == 0)
+		return (0);
+
+    ap = out;
+    *ap++ = s;
+	count = 1;
+	for (; ap < &out[ele - 1] &&
+            (s = strpbrk(s, accept)) != NULL;) {
+
+        *s = '\0';
+        if (*++s == '\0') break;
+
+        *ap++ = s;
+        count++;
     }
 
-    return (r);
+	*ap = NULL;
+	return (count);
+}
+
+double
+eval(struct kore_json_item *data, const char *expression)
+{
+    const char  *accept = "+-*/^%(), ";
+    struct kore_json_item *o;
+    double      d[256], result;
+    char        *vars_s[256], *copy;
+    te_variable vars[256];
+    te_expr     *expr;
+    int         i, len, n;
+
+    copy = kore_strdup(expression);
+    len = split_string_pbrk(copy, accept,
+            vars_s, sizeof(vars_s) / sizeof(vars_s[0]));
+
+    n = 0;
+    for (i = 0; i < len; i++) {
+        if ((o = json_get_item(data, vars_s[i])) != NULL) {
+            switch (o->type) {
+                case KORE_JSON_TYPE_NUMBER:
+                    d[i] = o->data.number;
+                    break;
+                case KORE_JSON_TYPE_INTEGER:
+                    d[i] = o->data.s64;
+                    break;
+                case KORE_JSON_TYPE_INTEGER_U64:
+                    d[i] = o->data.u64;
+                    break;
+                default:
+                    d[i] = NAN;
+            }
+
+            vars[n].name = vars_s[i];
+            vars[n].address = &d[i];
+            n++;
+        }
+    }
+
+    expr = te_compile(expression, vars, n, 0);
+    if (expr) {
+        result = te_eval(expr);
+        te_free(expr);
+    } else {
+        result = NAN;
+    }
+
+    kore_free(copy);
+    return (result);
 }
 
 int
