@@ -19,5 +19,7 @@
   "=equal": "=",
   ":colon": ":",
   ">greater": ">",
-  "~tilde": "~"
+  "~tilde": "~",
+  "upper": "(=>)",
+  "lower": "(=>)"
 }

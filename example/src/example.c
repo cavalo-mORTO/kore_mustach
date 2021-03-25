@@ -28,9 +28,19 @@ page(struct http_request *req)
     const char  *json = "{\"hello\": \"hello world\","
         "\"msg\": \"This is an integration of mustache templates with kore.\","
         "\"literal\": true,"
+        "\"upper\": \"(=>)\","
         "\"num\": 234.43}";
 
-    return (asset_serve_mustach(req, 200, asset_hello_html, json));
+    char    *result;
+    size_t  len;
+
+    kore_mustach((const char *)asset_hello_html, json,
+            partial_cb, lambda_cb, &result, &len);
+
+    http_response(req, 200, result, len);
+    kore_free(result);
+
+    return (KORE_RESULT_OK);
 }
 
 int

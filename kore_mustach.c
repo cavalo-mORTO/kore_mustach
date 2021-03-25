@@ -7,7 +7,6 @@
 #include "mustach.h"
 #include "kore_mustach.h"
 
-
 #if defined(NO_EXTENSION_FOR_MUSTACH)
 # undef  NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH
 # define NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH
@@ -40,6 +39,7 @@ struct closure {
 
     struct {
         struct kore_json_item   *root;
+        struct kore_json_item   *lambda;
         int                     iterate;
     } stack[MUSTACH_MAX_DEPTH];
 
@@ -54,7 +54,6 @@ static int  next(void *);
 static int  get(void *, const char *, struct mustach_sbuf *);
 static int  partial(void *, const char *, struct mustach_sbuf *);
 static int  emit(void *, const char *, size_t, int, FILE *);
-static int  lambda(void *, const char *, const char *, size_t, int, FILE *);
 
 static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *);
 static char                     *json_get_self_value(struct kore_json_item *);
@@ -63,18 +62,7 @@ static int                      compare(struct kore_json_item *, const char *);
 static int                      evalcomp(struct kore_json_item *, const char *, enum comp);
 static int                      split_string_pbrk(char *, const char *, char **, size_t);
 static double                   eval(struct kore_json_item *, const char *);
-
-static struct mustach_itf itf = {
-    .start = start,
-    .put = NULL,
-    .enter = enter,
-    .next = next,
-    .leave = leave,
-    .partial = partial,
-    .get = get,
-    .emit = emit,
-    .stop = NULL
-};
+static int                      islambda(struct closure *, int);
 
 int
 start(void *closure)
@@ -84,6 +72,7 @@ start(void *closure)
     cl->depth = 0;
     cl->depth_max = sizeof(cl->stack) / sizeof(cl->stack[0]);
     cl->stack[0].root = cl->context;
+    cl->stack[0].lambda = NULL;
     cl->stack[0].iterate = 0;
 
     /* initialize our buffer with 8 kilobytes. */
@@ -107,6 +96,8 @@ enter(void *closure, const char *name)
         return (MUSTACH_ERROR_TOO_DEEP);
 
     cl->stack[cl->depth].root = cl->context;
+    cl->stack[cl->depth].lambda = NULL;
+    cl->stack[cl->depth].iterate = 0;
 
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
     if (name[0] == '*' && !name[1]) {
@@ -131,7 +122,6 @@ enter(void *closure, const char *name)
                     cl->depth--;
                     return (0);
                 }
-                cl->stack[cl->depth].iterate = 0;
                 break;
 
             case KORE_JSON_TYPE_ARRAY:
@@ -154,8 +144,13 @@ enter(void *closure, const char *name)
                 }
 #endif
                 cl->context = item;
-                cl->stack[cl->depth].iterate = 0;
                 break;
+
+            case KORE_JSON_TYPE_STRING:
+                if (!memcmp(item->data.string, "(=>)", 4)) {
+                    cl->stack[cl->depth].lambda = item;
+                }
+                /* fallthrough */
 
             default:
                 if (k != C_no && val &&
@@ -163,8 +158,8 @@ enter(void *closure, const char *name)
                     cl->depth--;
                     return (0);
                 }
-                if (k == C_no) cl->context = item;
-                cl->stack[cl->depth].iterate = 0;
+                if (NULL == cl->stack[cl->depth].lambda && k == C_no)
+                    cl->context = item;
         }
 
         return (1);
@@ -274,63 +269,33 @@ int
 emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
 {
     struct closure  *cl = closure;
-    struct kore_buf b;
+    struct kore_buf tmp;
+    int depth;
 
     (void)file; /* unused */
+        
+    kore_buf_init(&tmp, size + 1);
+    kore_buf_append(&tmp, buffer, size);
 
     if (escape) {
-        kore_buf_init(&b, size + 1);
-        kore_buf_append(&b, buffer, size);
-
-        kore_buf_replace_string(&b, "&", "&amp;", 5);
-        kore_buf_replace_string(&b, "<", "&lt;", 4);
-        kore_buf_replace_string(&b, ">", "&gt;", 4);
-        /* kore_buf_replace_string(&b, "\\", "&#39;", 5); 
-         * kore_buf_replace_string(&b, "\"", "&quot;", 6);
-         * kore_buf_replace_string(&b, "/", "&#x2F;", 6); */
-
-        kore_buf_append(&cl->result, b.data, b.offset);
-        kore_buf_cleanup(&b);
-    } else {
-        kore_buf_append(&cl->result, buffer, size);
-    }
-    return (MUSTACH_OK);
-}
-
-int
-lambda(void *closure, const char *name, const char *buffer, size_t size, int escape, FILE *file)
-{
-    struct closure      *cl = closure;
-    struct closure      tmp = { 0 };
-    char                *copy;
-    int                 rc;
-
-    /* unused */
-    (void)escape;
-
-    copy = kore_malloc(size + 1);
-    kore_strlcpy(copy, buffer, size + 1);
-
-    /* copy closure */
-    tmp.context = cl->context;
-    tmp.partial_cb = cl->partial_cb;
-    tmp.lambda_cb = cl->lambda_cb;
-
-    /* render content */
-    rc = fmustach(copy, &itf, &tmp, 0);
-    kore_free(copy);
-
-    if (rc < 0) {
-        kore_buf_cleanup(&tmp.result);
-        return (rc);
+        kore_buf_replace_string(&tmp, "&", "&amp;", 5);
+        kore_buf_replace_string(&tmp, "<", "&lt;", 4);
+        kore_buf_replace_string(&tmp, ">", "&gt;", 4);
+        /* kore_buf_replace_string(&tmp, "\\", "&#39;", 5); 
+         * kore_buf_replace_string(&tmp, "\"", "&quot;", 6);
+         * kore_buf_replace_string(&tmp, "/", "&#x2F;", 6); */
     }
 
-    if (cl->lambda_cb)
-        cl->lambda_cb(name, &tmp.result);
+    if (cl->lambda_cb) {
+        depth = cl->depth;
+        while ((depth = islambda(cl, depth))) {
+            cl->lambda_cb(cl->stack[depth].lambda->name, &tmp);
+            depth--;
+        }
+    }
 
-    emit(closure, (const char *)tmp.result.data, tmp.result.offset, 0, file);
-    kore_buf_cleanup(&tmp.result);
-
+    kore_buf_append(&cl->result, tmp.data, tmp.offset);
+    kore_buf_cleanup(&tmp);
     return (MUSTACH_OK);
 }
         
@@ -487,27 +452,27 @@ evalcomp(struct kore_json_item *o, const char *value, enum comp k)
 int
 split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
 {
-	int         count;
-	char        **ap;
+    int         count;
+    char        **ap;
 
-	if (ele == 0)
-		return (0);
+    if (ele == 0)
+        return (0);
 
     ap = out;
     *ap++ = s;
-	count = 1;
-	for (; ap < &out[ele - 1] &&
-            (s = strpbrk(s, accept)) != NULL;) {
+    count = 1;
 
-        *s = '\0';
-        if (*++s == '\0') break;
+    while (ap < &out[ele - 1] &&
+            (s = strpbrk(s, accept)) != NULL) {
 
+        *s++ = '\0';
+        if (*s == '\0') break;
         *ap++ = s;
         count++;
     }
 
-	*ap = NULL;
-	return (count);
+    *ap = NULL;
+    return (count);
 }
 
 double
@@ -561,6 +526,15 @@ eval(struct kore_json_item *data, const char *expression)
 }
 
 int
+islambda(struct closure *cl, int depth)
+{
+    while (depth && cl->stack[depth].lambda == NULL)
+        depth--;
+
+    return (depth);
+}
+
+int
 kore_mustach(const char *template, const char *data,
         int (*partial_cb)(const char *, struct mustach_sbuf *),
         int (*lambda_cb)(const char *, struct kore_buf *),
@@ -569,6 +543,18 @@ kore_mustach(const char *template, const char *data,
     struct closure      cl = { 0 };
     struct kore_json    j;
     int                 r;
+
+    struct mustach_itf itf = {
+        .start = start,
+        .put = NULL,
+        .enter = enter,
+        .next = next,
+        .leave = leave,
+        .partial = partial,
+        .get = get,
+        .emit = emit,
+        .stop = NULL
+    };
 
     /* used in partial */
     cl.partial_cb = partial_cb;

@@ -1,4 +1,4 @@
-{{ ()upper }}
+{{# upper }}
 Hello {{name}}
 You have just won {{value}} dollars!
 {{#in_ca}}
@@ -42,9 +42,9 @@ end
 {{:\=equal}}
 {{::colon}}
 {{:\>greater}}
-{{ ()upper }}
+{{/ upper }}
 
-{{ ()lower }}
+{{# lower }}
 Hello {{name}}
 You have just won {{value}} dollars!
 {{#in_ca}}
@@ -88,7 +88,7 @@ end
 {{:\=equal}}
 {{::colon}}
 {{:\>greater}}
-{{ ()lower }}
+{{/ lower }}
 
 Hello {{name}}
 You have just won {{value}} dollars!

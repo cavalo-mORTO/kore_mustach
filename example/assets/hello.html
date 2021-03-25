@@ -3,10 +3,14 @@
 <body>
     <h1>{{ hello }}</h1>
     <p>{{ msg }}</p>
-
-
-    <p>{{ sqrt(num) * 22 }}</p>
+    <p>{{ sqrt(num) * 22 * 2.5422432434421 / num + 1 }}</p>
     <p>{{ literal }}</p>
 
+
+    <p>
+        {{#upper}}
+        {{ msg }}
+        {{/upper}}
+    </p>
 </body>
 </html>

@@ -24,11 +24,11 @@ int kore_mustach(const char *template, const char *data,
  *              partial of 'name'. @see mustach_sbuf.
  *
  * @lambda_cb: If defined (can be NULL). 'buf' contains the content of the
- *             lambda of 'name'. User is free to manipulate the content of
- *             'buf'. 'buf' or its contents must not be freed.
+ *             lambda of 'name', already rendered. User is free to manipulate
+ *             the content of 'buf'. 'buf' or its contents must not be freed.
  *             @see kore_buf.
  *
- *             A lambda name must be prefixed by '()' in the mustache tag.
- *             To be available in the future, maybe.
+ *             The lambda must be defined as a string consisting exclusively of
+ *             '(=>)' in the hash.
  */
 #endif
