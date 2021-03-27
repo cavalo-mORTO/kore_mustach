@@ -1,11 +1,25 @@
-#define _GNU_SOURCE
+/*
+ * Copyright (c) 2021 Miguel Rodrigues <miguelangelorodrigues@enta.pt>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
 
+#define _GNU_SOURCE
 #include <math.h>
-#include <ctype.h>
 #include <kore/kore.h>
-#include "tinyexpr.h"
 #include "mustach.h"
 #include "kore_mustach.h"
+#include "tinyexpr.h"
 
 #if defined(NO_EXTENSION_FOR_MUSTACH)
 # undef  NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH
@@ -89,7 +103,7 @@ enter(void *closure, const char *name)
     enum comp               k;
     char                    key[MUSTACH_MAX_LENGTH], *val;
 
-    if (!cl->context)
+    if (cl->context == NULL)
         return (0);
 
     if ((size_t)++cl->depth >= cl->depth_max)
@@ -206,7 +220,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     double                  d;
 
     sbuf->value = "";
-    if (!cl->context)
+    if (cl->context == NULL)
         return (MUSTACH_OK);
 
     switch (name[0]) {
@@ -305,7 +319,7 @@ json_get_item(struct kore_json_item *o, const char *name)
     struct kore_json_item   *item;
     int                     type;
 
-    if (!name)
+    if (name == NULL)
         return (NULL);
 
     for (type = KORE_JSON_TYPE_OBJECT;
