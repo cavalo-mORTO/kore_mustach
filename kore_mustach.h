@@ -28,12 +28,7 @@
  *
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
- */
-int kore_mustach(const char *template, const char *data,
-        int (*partial_cb)(const char *name, struct mustach_sbuf *sbuf),
-        int (*lambda_cb)(const char *name, struct kore_buf *buf),
-        char **result, size_t *length);
-/*
+ *
  * Function pointers passed to kore_mustach
  *
  * @partial_cb: If defined (can be NULL), returns in 'sbuf' the content of the
@@ -47,4 +42,16 @@ int kore_mustach(const char *template, const char *data,
  *             The lambda must be defined as a string consisting exclusively of
  *             '(=>)' in the hash.
  */
+int kore_mustach(const char *template, const char *data,
+        int (*partial_cb)(const char *name, struct mustach_sbuf *sbuf),
+        int (*lambda_cb)(const char *name, struct kore_buf *buf),
+        char **result, size_t *length);
+/*
+ * kore_mustach_hash - Same as kore_mustach except instead of accepting a json
+ *              string it requires a kore_json_item object.
+ */
+int kore_mustach_hash(const char *template, struct kore_json_item *hash,
+        int (*partial_cb)(const char *name, struct mustach_sbuf *sbuf),
+        int (*lambda_cb)(const char *name, struct kore_buf *buf),
+        char **result, size_t *length);
 #endif

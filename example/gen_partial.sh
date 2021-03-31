@@ -1,10 +1,8 @@
 #!/bin/bash -f
 dir="assets"
-
-printf "Generating partials...\n"
-
 src=""
 
+printf "Generating partials...\n"
 printf -v buf "#include <kore/kore.h>
 #include <kore/http.h>
 #include <mustach/mustach.h>
@@ -53,15 +51,15 @@ asset_serve_mustach(struct http_request *req, int status, const void *template, 
 {
     char    *result;
     size_t  len;
+    int     r;
 
-    kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
+    r = kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
     http_response(req, status, result, len);
     kore_free(result);
 
-    return (KORE_RESULT_OK);
+    return (r == 0);
 }";
 
 src+=$buf
-
 printf "Writing asset to src/partials.c\n"
 printf "%s" "$src" > src/partials.c

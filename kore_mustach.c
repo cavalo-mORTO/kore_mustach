@@ -549,15 +549,12 @@ islambda(struct closure *cl, int depth)
 }
 
 int
-kore_mustach(const char *template, const char *data,
+kore_mustach_hash(const char *template, struct kore_json_item *hash,
         int (*partial_cb)(const char *, struct mustach_sbuf *),
         int (*lambda_cb)(const char *, struct kore_buf *),
         char **result, size_t *length)
 {
-    struct closure      cl = { 0 };
-    struct kore_json    j;
-    int                 r;
-
+    int r;
     struct mustach_itf itf = {
         .start = start,
         .put = NULL,
@@ -570,27 +567,38 @@ kore_mustach(const char *template, const char *data,
         .stop = NULL
     };
 
-    /* used in partial */
-    cl.partial_cb = partial_cb;
+    struct closure cl = {
+        .context = hash,
+        .partial_cb = partial_cb,
+        .lambda_cb = lambda_cb
+    };
 
-    /* used in lambda */
-    cl.lambda_cb = lambda_cb;
+    r = fmustach(template, &itf, &cl, 0);
+    *result = (char *)kore_buf_release(&cl.result, length);
+    return (r);
+}
+
+int
+kore_mustach(const char *template, const char *data,
+        int (*partial_cb)(const char *, struct mustach_sbuf *),
+        int (*lambda_cb)(const char *, struct kore_buf *),
+        char **result, size_t *length)
+{
+    struct kore_json    j;
+    int                 r;
 
     if (!data) {
-        r = fmustach(template, &itf, &cl, 0);
-        *result = (char *)kore_buf_release(&cl.result, length);
-        return (r);
+        return (kore_mustach_hash(template, NULL, partial_cb, lambda_cb, result, length));
     }
 
     kore_json_init(&j, data, strlen(data));
     if (kore_json_parse(&j)) {
-        cl.context = j.root;
+        r = kore_mustach_hash(template, j.root, partial_cb, lambda_cb, result, length);
     } else {
         kore_log(LOG_NOTICE, "%s", kore_json_strerror(&j));
+        r = kore_mustach_hash(template, NULL, partial_cb, lambda_cb, result, length);
     }
 
-    r = fmustach(template, &itf, &cl, 0);
-    *result = (char *)kore_buf_release(&cl.result, length);
     kore_json_cleanup(&j);
     return (r);
 }
