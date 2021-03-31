@@ -30,6 +30,8 @@
 # define NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH
 # undef  NO_OBJECT_ITERATION_FOR_MUSTACH
 # define NO_OBJECT_ITERATION_FOR_MUSTACH
+# undef  NO_TINY_EXPR_EXTENSION_FOR_MUSTACH
+# define NO_TINY_EXPR_EXTENSION_FOR_MUSTACH
 #endif
 
 #if !defined(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)
@@ -74,9 +76,11 @@ static char                     *json_get_self_value(struct kore_json_item *);
 static void                     keyval(char *, char **, enum comp *);
 static int                      compare(struct kore_json_item *, const char *);
 static int                      evalcomp(struct kore_json_item *, const char *, enum comp);
+static int                      islambda(struct closure *, int);
+#if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
 static int                      split_string_pbrk(char *, const char *, char **, size_t);
 static double                   eval(struct kore_json_item *, const char *);
-static int                      islambda(struct closure *, int);
+#endif
 
 int
 start(void *closure)
@@ -217,7 +221,9 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     struct kore_json_item   *item;
     enum comp               k;
     char                    *val, *value, key[MUSTACH_MAX_LENGTH];
+#if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
     double                  d;
+#endif
 
     sbuf->value = "";
     if (cl->context == NULL)
@@ -249,12 +255,13 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
                 sbuf->freecb = kore_free;
                 break;
             }
-
+#if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
             d = eval(cl->context, name);
             if (!isnan(d) && asprintf(&value, "%.9g", d) > -1 ) {
                 sbuf->value = value;
                 sbuf->freecb = free;
             }
+#endif
     }
 
     return (MUSTACH_OK);
@@ -463,6 +470,7 @@ evalcomp(struct kore_json_item *o, const char *value, enum comp k)
     }
 }
 
+#if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
 int
 split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
 {
@@ -538,6 +546,7 @@ eval(struct kore_json_item *data, const char *expression)
     kore_free(copy);
     return (result);
 }
+#endif
 
 int
 islambda(struct closure *cl, int depth)

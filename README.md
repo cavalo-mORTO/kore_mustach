@@ -39,3 +39,5 @@ A lambda must be defined as a string consisting exclusively of "(=>)" in the has
 This implementation includes support for [TinyExpr](https://github.com/codeplea/tinyexpr).
 
 Just put your expression in the mustache tag.
+
+Can be disabled by setting -DNO_TINY_EXPR_EXTENSION_FOR_MUSTACH in the compiler flags.
