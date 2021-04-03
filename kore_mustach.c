@@ -497,8 +497,12 @@ split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
         return (0);
 
     ap = out;
-    *ap++ = s;
-    count = 1;
+    count = 0;
+
+    if (ap < &out[ele - 1]) {
+        *ap++ = s;
+        count++;
+    }
 
     while (ap < &out[ele - 1] &&
             (s = strpbrk(s, accept)) != NULL) {
