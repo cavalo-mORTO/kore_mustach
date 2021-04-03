@@ -72,6 +72,7 @@ static int  partial(void *, const char *, struct mustach_sbuf *);
 static int  emit(void *, const char *, size_t, int, FILE *);
 
 static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *);
+static struct kore_json_item    *json_item_in_stack(struct closure *, const char *);
 static char                     *json_get_self_value(struct kore_json_item *);
 static void                     keyval(char *, char **, enum comp *);
 static int                      compare(struct kore_json_item *, const char *);
@@ -79,7 +80,7 @@ static int                      evalcomp(struct kore_json_item *, const char *, 
 static int                      islambda(struct closure *, int);
 #if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
 static int                      split_string_pbrk(char *, const char *, char **, size_t);
-static double                   eval(struct kore_json_item *, const char *);
+static double                   eval(struct closure *, const char *);
 #endif
 
 int
@@ -133,7 +134,7 @@ enter(void *closure, const char *name)
 #endif
     kore_strlcpy(key, name, sizeof(key));
     keyval(key, &val, &k);
-    if ((item = json_get_item(cl->context, key)) != NULL) {
+    if ((item = json_item_in_stack(cl, key)) != NULL) {
         switch (item->type) {
             case KORE_JSON_TYPE_LITERAL:
                 if (item->data.literal != KORE_JSON_TRUE) {
@@ -176,8 +177,7 @@ enter(void *closure, const char *name)
                     cl->depth--;
                     return (0);
                 }
-                if (NULL == cl->stack[cl->depth].lambda && k == C_no)
-                    cl->context = item;
+                cl->context = item;
         }
 
         return (1);
@@ -247,7 +247,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         default:
             kore_strlcpy(key, name, sizeof(key));
             keyval(key, &val, &k);
-            if ((item = json_get_item(cl->context, key)) &&
+            if ((item = json_item_in_stack(cl, key)) != NULL &&
                     ((val && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
                     (value = json_get_self_value(item)) != NULL)
             {
@@ -256,7 +256,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
                 break;
             }
 #if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
-            d = eval(cl->context, name);
+            d = eval(cl, name);
             if (!isnan(d) && asprintf(&value, "%.9g", d) > -1 ) {
                 sbuf->value = value;
                 sbuf->freecb = free;
@@ -275,7 +275,7 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
     const char      *s;
 
     sbuf->value = "";
-    if (cl->context && (item = json_get_item(cl->context, name)) &&
+    if (cl->context && (item = json_item_in_stack(cl, name)) &&
             (s = json_get_self_value(item))) {
         sbuf->value = s;
         sbuf->freecb = kore_free;
@@ -362,6 +362,22 @@ json_get_self_value(struct kore_json_item *o)
             o->name = name;
             return ((char *)kore_buf_release(&buf, &len));
     }
+}
+
+struct kore_json_item *
+json_item_in_stack(struct closure *cl, const char *name)
+{
+    struct kore_json_item *o;
+    int depth;
+    
+    if ((o = json_get_item(cl->context, name)) != NULL)
+        return (o);
+
+    depth = cl->depth;
+    while (depth && (o = json_get_item(cl->stack[depth].root, name)) == NULL)
+        depth--;
+
+    return (o);
 }
 
 void
@@ -498,7 +514,7 @@ split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
 }
 
 double
-eval(struct kore_json_item *data, const char *expression)
+eval(struct closure *cl, const char *expression)
 {
     const char  *accept = "+-*/^%(), ";
     struct kore_json_item *o;
@@ -514,7 +530,7 @@ eval(struct kore_json_item *data, const char *expression)
 
     n = 0;
     for (i = 0; i < len; i++) {
-        if ((o = json_get_item(data, vars_s[i])) != NULL) {
+        if ((o = json_item_in_stack(cl, vars_s[i])) != NULL) {
             switch (o->type) {
                 case KORE_JSON_TYPE_NUMBER:
                     d[i] = o->data.number;
