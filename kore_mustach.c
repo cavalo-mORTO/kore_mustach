@@ -456,7 +456,7 @@ compare(struct kore_json_item *o, const char *value)
             return (o->data.number - strtod(value, NULL));
 
         case KORE_JSON_TYPE_INTEGER:
-            return (o->data.s64 - strtoll(value, NULL, 10));
+            return (o->data.integer - strtoll(value, NULL, 10));
 
         case KORE_JSON_TYPE_INTEGER_U64:
             return (o->data.u64 - strtoull(value, NULL, 10));
@@ -540,7 +540,7 @@ eval(struct closure *cl, const char *expression)
                     d[i] = o->data.number;
                     break;
                 case KORE_JSON_TYPE_INTEGER:
-                    d[i] = o->data.s64;
+                    d[i] = o->data.integer;
                     break;
                 case KORE_JSON_TYPE_INTEGER_U64:
                     d[i] = o->data.u64;
@@ -624,7 +624,7 @@ kore_mustach(const char *template, const char *data,
     if (kore_json_parse(&j)) {
         r = kore_mustach_hash(template, j.root, partial_cb, lambda_cb, result, length);
     } else {
-        kore_log(LOG_NOTICE, "%s", kore_json_strerror(&j));
+        kore_log(LOG_NOTICE, "%s", kore_json_strerror());
         r = kore_mustach_hash(template, NULL, partial_cb, lambda_cb, result, length);
     }
 
