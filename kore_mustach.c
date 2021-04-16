@@ -77,7 +77,7 @@ static char                     *json_get_self_value(struct kore_json_item *);
 static void                     keyval(char *, char **, enum comp *);
 static int                      compare(struct kore_json_item *, const char *);
 static int                      evalcomp(struct kore_json_item *, const char *, enum comp);
-static int                      islambda(struct closure *, int);
+static int                      islambda(struct closure *, int *);
 #if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
 static int                      split_string_pbrk(char *, const char *, char **, size_t);
 static double                   eval(struct closure *, const char *);
@@ -232,7 +232,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     switch (name[0]) {
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
         case '*':
-            if (cl->context->name)
+            if (cl->context->name != NULL)
                 sbuf->value = cl->context->name;
             break;
 #endif
@@ -309,7 +309,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
 
     if (cl->lambda_cb) {
         depth = cl->depth;
-        while ((depth = islambda(cl, depth))) {
+        while (islambda(cl, &depth)) {
             cl->lambda_cb(cl->stack[depth].lambda->name, &tmp);
             depth--;
         }
@@ -569,12 +569,12 @@ eval(struct closure *cl, const char *expression)
 #endif
 
 int
-islambda(struct closure *cl, int depth)
+islambda(struct closure *cl, int *depth)
 {
-    while (depth && cl->stack[depth].lambda == NULL)
-        depth--;
+    while (*depth && cl->stack[*depth].lambda == NULL)
+        (*depth)--;
 
-    return (depth);
+    return (*depth);
 }
 
 int
@@ -595,7 +595,6 @@ kore_mustach_hash(const char *template, struct kore_json_item *hash,
         .emit = emit,
         .stop = NULL
     };
-
     struct closure cl = {
         .context = hash,
         .partial_cb = partial_cb,

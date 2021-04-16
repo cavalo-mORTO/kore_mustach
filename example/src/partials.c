@@ -63,5 +63,5 @@ asset_serve_mustach(struct http_request *req, int status, const void *template, 
     http_response(req, status, result, len);
     kore_free(result);
 
-    return (r == 0);
+    return (r == MUSTACH_OK);
 }
