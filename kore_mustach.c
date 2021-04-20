@@ -166,7 +166,7 @@ enter(void *closure, const char *name)
                 break;
 
             case KORE_JSON_TYPE_STRING:
-                if (!memcmp(item->data.string, "(=>)", 4)) {
+                if (!memcmp(item->data.string, "(=>)\0", 5)) {
                     cl->stack[cl->depth].lambda = item;
                 }
                 /* fallthrough */
