@@ -57,11 +57,11 @@ asset_serve_mustach(struct http_request *req, int status, const void *template, 
 {
     char    *result;
     size_t  len;
-    int     r;
+    int     rc;
 
-    r = kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
+    rc = kore_mustach((const char *)template, (const char *)data, partial_cb, NULL, &result, &len);
     http_response(req, status, result, len);
     kore_free(result);
 
-    return (r == MUSTACH_OK);
+    return (rc == MUSTACH_OK);
 }

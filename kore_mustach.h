@@ -47,10 +47,10 @@ int kore_mustach(const char *template, const char *data,
         int (*lambda_cb)(const char *name, struct kore_buf *buf),
         char **result, size_t *length);
 /*
- * kore_mustach_hash - Same as kore_mustach except instead of accepting a json
+ * kore_mustach_json - Same as kore_mustach except instead of accepting a json
  *              string it requires a kore_json_item object.
  */
-int kore_mustach_hash(const char *template, struct kore_json_item *hash,
+int kore_mustach_json(const char *template, struct kore_json_item *json,
         int (*partial_cb)(const char *name, struct mustach_sbuf *sbuf),
         int (*lambda_cb)(const char *name, struct kore_buf *buf),
         char **result, size_t *length);

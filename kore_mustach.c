@@ -49,7 +49,7 @@ enum comp {
 
 struct closure {
     struct kore_json_item   *context;
-    struct kore_buf         result;
+    struct kore_buf         *result;
     int                     depth;
     size_t                  depth_max;
 
@@ -95,7 +95,7 @@ start(void *closure)
     cl->stack[0].iterate = 0;
 
     /* initialize our buffer with 8 kilobytes. */
-    kore_buf_init(&cl->result, 8 << 10);
+    cl->result = kore_buf_alloc(8 << 10);
 
     return (MUSTACH_OK);
 }
@@ -315,7 +315,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
         }
     }
 
-    kore_buf_append(&cl->result, tmp.data, tmp.offset);
+    kore_buf_append(cl->result, tmp.data, tmp.offset);
     kore_buf_cleanup(&tmp);
     return (MUSTACH_OK);
 }
@@ -578,12 +578,12 @@ islambda(struct closure *cl, int *depth)
 }
 
 int
-kore_mustach_hash(const char *template, struct kore_json_item *hash,
+kore_mustach_json(const char *template, struct kore_json_item *json,
         int (*partial_cb)(const char *, struct mustach_sbuf *),
         int (*lambda_cb)(const char *, struct kore_buf *),
         char **result, size_t *length)
 {
-    int r;
+    int rc;
     struct mustach_itf itf = {
         .start = start,
         .put = NULL,
@@ -596,14 +596,14 @@ kore_mustach_hash(const char *template, struct kore_json_item *hash,
         .stop = NULL
     };
     struct closure cl = {
-        .context = hash,
+        .context = json,
         .partial_cb = partial_cb,
         .lambda_cb = lambda_cb
     };
 
-    r = fmustach(template, &itf, &cl, 0);
-    *result = (char *)kore_buf_release(&cl.result, length);
-    return (r);
+    rc = fmustach(template, &itf, &cl, 0);
+    *result = (char *)kore_buf_release(cl.result, length);
+    return (rc);
 }
 
 int
@@ -612,21 +612,21 @@ kore_mustach(const char *template, const char *data,
         int (*lambda_cb)(const char *, struct kore_buf *),
         char **result, size_t *length)
 {
-    struct kore_json    j;
-    int                 r;
+    struct kore_json    json;
+    int                 rc;
 
     if (!data) {
-        return (kore_mustach_hash(template, NULL, partial_cb, lambda_cb, result, length));
+        return (kore_mustach_json(template, NULL, partial_cb, lambda_cb, result, length));
     }
 
-    kore_json_init(&j, data, strlen(data));
-    if (kore_json_parse(&j)) {
-        r = kore_mustach_hash(template, j.root, partial_cb, lambda_cb, result, length);
+    kore_json_init(&json, data, strlen(data));
+    if (kore_json_parse(&json)) {
+        rc = kore_mustach_json(template, json.root, partial_cb, lambda_cb, result, length);
     } else {
         kore_log(LOG_NOTICE, "%s", kore_json_strerror());
-        r = kore_mustach_hash(template, NULL, partial_cb, lambda_cb, result, length);
+        rc = kore_mustach_json(template, NULL, partial_cb, lambda_cb, result, length);
     }
 
-    kore_json_cleanup(&j);
-    return (r);
+    kore_json_cleanup(&json);
+    return (rc);
 }
