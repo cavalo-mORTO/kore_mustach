@@ -106,7 +106,7 @@ enter(void *closure, const char *name)
     struct closure          *cl = closure;
     struct kore_json_item   *item, *n;
     enum comp               k;
-    char                    key[MUSTACH_MAX_LENGTH], *val;
+    char                    key[MUSTACH_MAX_LENGTH + 1], *val;
 
     if (cl->context == NULL)
         return (0);
@@ -220,7 +220,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     struct closure          *cl = closure;
     struct kore_json_item   *item;
     enum comp               k;
-    char                    *val, *value, key[MUSTACH_MAX_LENGTH];
+    char                    *val, *value, key[MUSTACH_MAX_LENGTH + 1];
 #if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
     double                  d;
 #endif
