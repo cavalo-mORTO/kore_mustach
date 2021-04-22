@@ -121,7 +121,7 @@ enter(void *closure, const char *name)
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
     if (name[0] == '*' && !name[1]) {
         if (cl->context->type == KORE_JSON_TYPE_OBJECT &&
-                (n = TAILQ_FIRST(&cl->context->data.items)))
+                (n = TAILQ_FIRST(&cl->context->data.items)) != NULL)
         {
             cl->context = n;
             cl->stack[cl->depth].iterate = 1;
@@ -154,7 +154,7 @@ enter(void *closure, const char *name)
 
             case KORE_JSON_TYPE_OBJECT:
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
-                if (val && val[0] == '*' &&
+                if (val != NULL && val[0] == '*' &&
                         (n = TAILQ_FIRST(&item->data.items)) != NULL)
                 {
                     cl->context = n;
@@ -172,7 +172,7 @@ enter(void *closure, const char *name)
                 /* fallthrough */
 
             default:
-                if (k != C_no && val &&
+                if (k != C_no && val != NULL &&
                         (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k))) {
                     cl->depth--;
                     return (0);
@@ -229,40 +229,42 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     if (cl->context == NULL)
         return (MUSTACH_OK);
 
-    switch (name[0]) {
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
-        case '*':
-            if (cl->context->name != NULL)
-                sbuf->value = cl->context->name;
-            break;
+    if (!memcmp(name, "*\0", 2)) {
+        if (cl->context->name != NULL)
+            sbuf->value = cl->context->name;
+
+        return (MUSTACH_OK);
+    }
 #endif
 #if !defined(NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH)
-        case '.':
-            if ((value = json_get_self_value(cl->context)) != NULL) {
-                sbuf->value = value;
-                sbuf->freecb = kore_free;
-            }
-            break;
-#endif
-        default:
-            kore_strlcpy(key, name, sizeof(key));
-            keyval(key, &val, &k);
-            if ((item = json_item_in_stack(cl, key)) != NULL &&
-                    ((val && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
-                    (value = json_get_self_value(item)) != NULL)
-            {
-                sbuf->value = value;
-                sbuf->freecb = kore_free;
-                break;
-            }
-#if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
-            d = eval(cl, name);
-            if (!isnan(d) && asprintf(&value, "%.9g", d) > -1 ) {
-                sbuf->value = value;
-                sbuf->freecb = free;
-            }
-#endif
+    if (!memcmp(name, ".\0", 2)) {
+        if ((value = json_get_self_value(cl->context)) != NULL) {
+            sbuf->value = value;
+            sbuf->freecb = kore_free;
+        }
+        return (MUSTACH_OK);
     }
+#endif
+
+    kore_strlcpy(key, name, sizeof(key));
+    keyval(key, &val, &k);
+    if ((item = json_item_in_stack(cl, key)) != NULL &&
+            ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
+            (value = json_get_self_value(item)) != NULL)
+    {
+        sbuf->value = value;
+        sbuf->freecb = kore_free;
+        return (MUSTACH_OK);
+    }
+
+#if !defined(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)
+    d = eval(cl, name);
+    if (!isnan(d) && asprintf(&value, "%.9g", d) > -1 ) {
+        sbuf->value = value;
+        sbuf->freecb = free;
+    }
+#endif
 
     return (MUSTACH_OK);
 }
@@ -270,16 +272,17 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 int
 partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
 {
-    struct closure  *cl = closure;
+    struct closure          *cl = closure;
     struct kore_json_item   *item;
-    const char      *s;
+    const char              *value;
 
     sbuf->value = "";
-    if (cl->context && (item = json_item_in_stack(cl, name)) &&
-            (s = json_get_self_value(item))) {
-        sbuf->value = s;
+    if (cl->context != NULL &&
+            (item = json_item_in_stack(cl, name)) != NULL &&
+            (value = json_get_self_value(item)) != NULL) {
+        sbuf->value = value;
         sbuf->freecb = kore_free;
-    } else if (cl->partial_cb) {
+    } else if (cl->partial_cb != NULL) {
         return (cl->partial_cb(name, sbuf));
     }
 
@@ -307,7 +310,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
          * kore_buf_replace_string(&tmp, "/", "&#x2F;", 6); */
     }
 
-    if (cl->lambda_cb) {
+    if (cl->lambda_cb != NULL) {
         depth = cl->depth;
         while (islambda(cl, &depth)) {
             cl->lambda_cb(cl->stack[depth].lambda->name, &tmp);
@@ -615,7 +618,7 @@ kore_mustach(const char *template, const char *data,
     struct kore_json    json;
     int                 rc;
 
-    if (!data) {
+    if (data == NULL) {
         return (kore_mustach_json(template, NULL, partial_cb, lambda_cb, result, length));
     }
 
