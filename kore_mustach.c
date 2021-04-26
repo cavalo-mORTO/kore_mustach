@@ -119,7 +119,7 @@ enter(void *closure, const char *name)
     cl->stack[cl->depth].iterate = 0;
 
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
-    if (name[0] == '*' && !name[1]) {
+    if (name[0] == '*' && name[1] == '\0') {
         if (cl->context->type == KORE_JSON_TYPE_OBJECT &&
                 (n = TAILQ_FIRST(&cl->context->data.items)) != NULL)
         {
@@ -206,7 +206,7 @@ next(void *closure)
     struct kore_json_item   *n;
 
     if (cl->stack[cl->depth].iterate &&
-            (n = TAILQ_NEXT(cl->context, list)))
+            (n = TAILQ_NEXT(cl->context, list)) != NULL)
     {
         cl->context = n;
         return (1);
@@ -230,7 +230,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         return (MUSTACH_OK);
 
 #if !defined(NO_OBJECT_ITERATION_FOR_MUSTACH)
-    if (!memcmp(name, "*\0", 2)) {
+    if (name[0] == '*' && name[1] == '\0') {
         if (cl->context->name != NULL)
             sbuf->value = cl->context->name;
 
@@ -238,7 +238,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     }
 #endif
 #if !defined(NO_SINGLE_DOT_EXTENSION_FOR_MUSTACH)
-    if (!memcmp(name, ".\0", 2)) {
+    if (name[0] == '.' && name[1] == '\0') {
         if ((value = json_get_self_value(cl->context)) != NULL) {
             sbuf->value = value;
             sbuf->freecb = kore_free;
