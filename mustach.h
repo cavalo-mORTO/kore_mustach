@@ -1,6 +1,5 @@
 /*
  Author: José Bollo <jobol@nonadev.net>
- Author: José Bollo <jose.bollo@iot.bzh>
 
  https://gitlab.com/jobol/mustach
 
@@ -15,7 +14,7 @@ struct mustach_sbuf; /* see below */
 /**
  * Current version of mustach and its derivates
  */
-#define MUSTACH_VERSION 99
+#define MUSTACH_VERSION 100
 #define MUSTACH_VERSION_MAJOR (MUSTACH_VERSION / 100)
 #define MUSTACH_VERSION_MINOR (MUSTACH_VERSION % 100)
 
@@ -27,20 +26,53 @@ struct mustach_sbuf; /* see below */
 /**
  * Maximum length of tags in mustaches {{...}}
  */
-#define MUSTACH_MAX_LENGTH 1024
+#define MUSTACH_MAX_LENGTH 4096
 
 /**
- * mustach_itf - interface for callbacks
+ * Flags specific to mustach core
+ */
+#define Mustach_With_NoExtensions   0
+#define Mustach_With_AllExtensions -1
+#define Mustach_With_Colon          1
+#define Mustach_With_EmptyTag       2
+
+/*
+ * Definition of error codes returned by mustach
+ */
+#define MUSTACH_OK                       0
+#define MUSTACH_ERROR_SYSTEM            -1
+#define MUSTACH_ERROR_UNEXPECTED_END    -2
+#define MUSTACH_ERROR_EMPTY_TAG         -3
+#define MUSTACH_ERROR_TAG_TOO_LONG      -4
+#define MUSTACH_ERROR_BAD_SEPARATORS    -5
+#define MUSTACH_ERROR_TOO_DEEP          -6
+#define MUSTACH_ERROR_CLOSING           -7
+#define MUSTACH_ERROR_BAD_UNESCAPE_TAG  -8
+#define MUSTACH_ERROR_INVALID_ITF       -9
+#define MUSTACH_ERROR_ITEM_NOT_FOUND    -10
+#define MUSTACH_ERROR_PARTIAL_NOT_FOUND -11
+
+/*
+ * You can use definition below for user specific error
  *
- * All of this function should return a negative value to stop
- * the mustache processing. The returned negative value will be
- * then returned to the caller of mustach as is.
+ * The macro MUSTACH_ERROR_USER is involutive so for any value
+ *   value = MUSTACH_ERROR_USER(MUSTACH_ERROR_USER(value))
+ */
+#define MUSTACH_ERROR_USER_BASE         -100
+#define MUSTACH_ERROR_USER(x)           (MUSTACH_ERROR_USER_BASE-(x))
+#define MUSTACH_IS_ERROR_USER(x)        (MUSTACH_ERROR_USER(x) >= 0)
+
+/**
+ * mustach_itf - pure abstract mustach - interface for callbacks
  *
  * The functions enter and next should return 0 or 1.
  *
  * All other functions should normally return MUSTACH_OK (zero).
- * If it returns a negative value, it means an error that stop
- * the process and that is reported to the caller.
+ *
+ * If any function returns a negative value, it means an error that
+ * stop the processing and that is reported to the caller. Mustach
+ * also has its own error codes. Using the macros MUSTACH_ERROR_USER
+ * and MUSTACH_IS_ERROR_USER could help to avoid clashes.
  *
  * @start: If defined (can be NULL), starts the mustach processing
  *         of the closure, called at the very beginning before any
@@ -82,18 +114,18 @@ struct mustach_sbuf; /* see below */
  *        the meaning of 'FILE *file' is abstract for mustach's process and
  *        then you can use 'FILE*file' pass any kind of pointer (including NULL)
  *        to the function 'fmustach'. An example of a such behaviour is given by
- *        the implementation of 'umustach_json_c'.
+ *        the implementation of 'mustach_json_c_write'.
  *
  * @get: If defined (can be NULL), returns in 'sbuf' the value of 'name'.
  *       As an extension (see NO_ALLOW_EMPTY_TAG), the 'name' can be
  *       the empty string. In that later case an implementation can
  *       return MUSTACH_ERROR_EMPTY_TAG to refuse empty names.
- *       If NULL and 'put' NULL the error MUSTACH_ERROR_INVALID_ITF
+ *       If 'get' is NULL and 'put' NULL the error MUSTACH_ERROR_INVALID_ITF
  *       is returned.
  *
  * @stop: If defined (can be NULL), stops the mustach processing
  *        of the closure, called at the very end after all mustach
- *        processing occurerd. The status returned by the processing
+ *        processing occurered. The status returned by the processing
  *        is passed to the stop.
  *
  * The array below summarize status of callbacks:
@@ -117,7 +149,7 @@ struct mustach_sbuf; /* see below */
  *
  * The DUCK case runs on one leg. 'get' is not used if 'partial' is defined
  * but is used for 'partial' if 'partial' is NULL. Thus for clarity, do not use
- * it that way but define 'partial' and let 'get' NULL.
+ * it that way but define 'partial' and let 'get' be NULL.
  *
  * The DANGEROUS case is special: it allows abstract FILE if 'partial' is defined
  * but forbids abstract FILE when 'partial' is NULL.
@@ -167,27 +199,49 @@ struct mustach_sbuf {
 	void *closure;
 };
 
-/*
- * Definition of error codes returned by mustach
+/**
+ * mustach_file - Renders the mustache 'template' in 'file' for 'itf' and 'closure'.
+ *
+ * @template: the template string to instanciate
+ * @itf:      the interface to the functions that mustach calls
+ * @closure:  the closure to pass to functions called
+ * @file:     the file where to write the result
+ *
+ * Returns 0 in case of success, -1 with errno set in case of system error
+ * a other negative value in case of error.
  */
-#define MUSTACH_OK                       0
-#define MUSTACH_ERROR_SYSTEM            -1
-#define MUSTACH_ERROR_UNEXPECTED_END    -2
-#define MUSTACH_ERROR_EMPTY_TAG         -3
-#define MUSTACH_ERROR_TAG_TOO_LONG      -4
-#define MUSTACH_ERROR_BAD_SEPARATORS    -5
-#define MUSTACH_ERROR_TOO_DEEP          -6
-#define MUSTACH_ERROR_CLOSING           -7
-#define MUSTACH_ERROR_BAD_UNESCAPE_TAG  -8
-#define MUSTACH_ERROR_INVALID_ITF       -9
-#define MUSTACH_ERROR_ITEM_NOT_FOUND    -10
-#define MUSTACH_ERROR_PARTIAL_NOT_FOUND -11
-
-/* You can use definition below for user specific error */
-#define MUSTACH_ERROR_USER_BASE         -100
-#define MUSTACH_ERROR_USER(x)           (MUSTACH_ERROR_USER_BASE-(x))
+extern int mustach_file(const char *template, struct mustach_itf *itf, void *closure, int flags, FILE *file);
 
 /**
+ * mustach_fd - Renders the mustache 'template' in 'fd' for 'itf' and 'closure'.
+ *
+ * @template: the template string to instanciate
+ * @itf:      the interface to the functions that mustach calls
+ * @closure:  the closure to pass to functions called
+ * @fd:       the file descriptor number where to write the result
+ *
+ * Returns 0 in case of success, -1 with errno set in case of system error
+ * a other negative value in case of error.
+ */
+extern int mustach_fd(const char *template, struct mustach_itf *itf, void *closure, int flags, int fd);
+
+/**
+ * mustach_mem - Renders the mustache 'template' in 'result' for 'itf' and 'closure'.
+ *
+ * @template: the template string to instanciate
+ * @itf:      the interface to the functions that mustach calls
+ * @closure:  the closure to pass to functions called
+ * @result:   the pointer receiving the result when 0 is returned
+ * @size:     the size of the returned result
+ *
+ * Returns 0 in case of success, -1 with errno set in case of system error
+ * a other negative value in case of error.
+ */
+extern int mustach_mem(const char *template, struct mustach_itf *itf, void *closure, int flags, char **result, size_t *size);
+
+/**
+ * OBSOLETE use mustach_file
+ *
  * fmustach - Renders the mustache 'template' in 'file' for 'itf' and 'closure'.
  *
  * @template: the template string to instanciate
@@ -201,7 +255,9 @@ struct mustach_sbuf {
 extern int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE *file);
 
 /**
- * fmustach - Renders the mustache 'template' in 'fd' for 'itf' and 'closure'.
+ * OBSOLETE use mustach_fd
+ *
+ * fdmustach - Renders the mustache 'template' in 'fd' for 'itf' and 'closure'.
  *
  * @template: the template string to instanciate
  * @itf:      the interface to the functions that mustach calls
@@ -214,7 +270,9 @@ extern int fmustach(const char *template, struct mustach_itf *itf, void *closure
 extern int fdmustach(const char *template, struct mustach_itf *itf, void *closure, int fd);
 
 /**
- * fmustach - Renders the mustache 'template' in 'result' for 'itf' and 'closure'.
+ * OBSOLETE use mustach_mem
+ *
+ * mustach - Renders the mustache 'template' in 'result' for 'itf' and 'closure'.
  *
  * @template: the template string to instanciate
  * @itf:      the interface to the functions that mustach calls

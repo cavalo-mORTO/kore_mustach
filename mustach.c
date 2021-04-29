@@ -1,6 +1,5 @@
 /*
  Author: José Bollo <jobol@nonadev.net>
- Author: José Bollo <jose.bollo@iot.bzh>
 
  https://gitlab.com/jobol/mustach
 
@@ -23,13 +22,6 @@
 
 #include "mustach.h"
 
-#if defined(NO_EXTENSION_FOR_MUSTACH)
-# undef  NO_COLON_EXTENSION_FOR_MUSTACH
-# define NO_COLON_EXTENSION_FOR_MUSTACH
-# undef  NO_ALLOW_EMPTY_TAG
-# define NO_ALLOW_EMPTY_TAG
-#endif
-
 struct iwrap {
 	int (*emit)(void *closure, const char *buffer, size_t size, int escape, FILE *file);
 	void *closure; /* closure for: enter, next, leave, emit, get */
@@ -41,6 +33,7 @@ struct iwrap {
 	int (*get)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	int (*partial)(void *closure, const char *name, struct mustach_sbuf *sbuf);
 	void *closure_partial; /* closure for partial */
+	int flags;
 };
 
 #if !defined(NO_OPEN_MEMSTREAM)
@@ -253,6 +246,10 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 		len = (size_t)(term - beg);
 		c = *beg;
 		switch(c) {
+		case ':':
+			if (iwrap->flags & Mustach_With_Colon)
+				goto exclude_first;
+			goto get_name;
 		case '!':
 		case '=':
 			break;
@@ -274,17 +271,16 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 		case '/':
 		case '&':
 		case '>':
-#if !defined(NO_COLON_EXTENSION_FOR_MUSTACH)
-		case ':':
-#endif
-			beg++; len--;
+exclude_first:
+			beg++;
+			len--;
+			/*@fallthrough@*/
 		default:
+get_name:
 			while (len && isspace(beg[0])) { beg++; len--; }
 			while (len && isspace(beg[len-1])) len--;
-#if !defined(NO_ALLOW_EMPTY_TAG)
-			if (len == 0)
+			if (len == 0 && !(iwrap->flags & Mustach_With_EmptyTag))
 				return MUSTACH_ERROR_EMPTY_TAG;
-#endif
 			if (len > MUSTACH_MAX_LENGTH)
 				return MUSTACH_ERROR_TAG_TOO_LONG;
 			memcpy(name, beg, len);
@@ -379,7 +375,7 @@ static int process(const char *template, struct iwrap *iwrap, FILE *file, const 
 	}
 }
 
-int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE *file)
+int mustach_file(const char *template, struct mustach_itf *itf, void *closure, int flags, FILE *file)
 {
 	int rc;
 	struct iwrap iwrap;
@@ -412,6 +408,7 @@ int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE 
 	iwrap.next = itf->next;
 	iwrap.leave = itf->leave;
 	iwrap.get = itf->get;
+	iwrap.flags = flags;
 
 	/* process */
 	rc = itf->start ? itf->start(closure) : 0;
@@ -422,7 +419,7 @@ int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE 
 	return rc;
 }
 
-int fdmustach(const char *template, struct mustach_itf *itf, void *closure, int fd)
+int mustach_fd(const char *template, struct mustach_itf *itf, void *closure, int flags, int fd)
 {
 	int rc;
 	FILE *file;
@@ -432,13 +429,13 @@ int fdmustach(const char *template, struct mustach_itf *itf, void *closure, int 
 		rc = MUSTACH_ERROR_SYSTEM;
 		errno = ENOMEM;
 	} else {
-		rc = fmustach(template, itf, closure, file);
+		rc = mustach_file(template, itf, closure, flags, file);
 		fclose(file);
 	}
 	return rc;
 }
 
-int mustach(const char *template, struct mustach_itf *itf, void *closure, char **result, size_t *size)
+int mustach_mem(const char *template, struct mustach_itf *itf, void *closure, int flags, char **result, size_t *size)
 {
 	int rc;
 	FILE *file;
@@ -451,12 +448,27 @@ int mustach(const char *template, struct mustach_itf *itf, void *closure, char *
 	if (file == NULL)
 		rc = MUSTACH_ERROR_SYSTEM;
 	else {
-		rc = fmustach(template, itf, closure, file);
+		rc = mustach_file(template, itf, closure, flags, file);
 		if (rc < 0)
 			memfile_abort(file, result, size);
 		else
 			rc = memfile_close(file, result, size);
 	}
 	return rc;
+}
+
+int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE *file)
+{
+	return mustach_file(template, itf, closure, Mustach_With_AllExtensions, file);
+}
+
+int fdmustach(const char *template, struct mustach_itf *itf, void *closure, int fd)
+{
+	return mustach_fd(template, itf, closure, Mustach_With_AllExtensions, fd);
+}
+
+int mustach(const char *template, struct mustach_itf *itf, void *closure, char **result, size_t *size)
+{
+	return mustach_mem(template, itf, closure, Mustach_With_AllExtensions, result, size);
 }
 

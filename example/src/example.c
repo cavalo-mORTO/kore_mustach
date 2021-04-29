@@ -35,7 +35,7 @@ page(struct http_request *req)
     size_t  len;
 
     kore_mustach((const char *)asset_hello_html, json,
-            partial_cb, lambda_cb, &result, &len);
+            partial_cb, lambda_cb, Mustach_With_AllExtensions, &result, &len);
 
     http_response(req, 200, result, len);
     kore_free(result);
@@ -80,7 +80,7 @@ test6(struct http_request *req)
     size_t  len;
 
     kore_mustach((const char *)asset_test6_must, (const char *)asset_test6_json,
-            partial_cb, lambda_cb, &result, &len);
+            partial_cb, lambda_cb, Mustach_With_AllExtensions, &result, &len);
 
     http_response(req, 200, result, len);
     kore_free(result);

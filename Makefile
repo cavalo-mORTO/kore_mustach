@@ -7,24 +7,9 @@ SOVER = .0
 SOVEREV = .0.99
 
 HEADERS  = mustach.h kore_mustach.h
-CFLAGS = -fPIC -Wall -Wextra
-lib_LDFLAGS  = -shared
-lib_objs  = mustach.o kore_mustach.o
-
-ifneq ("$(NO_TINY_EXPR_EXTENSION_FOR_MUSTACH)", "")
-	CFLAGS += -DNO_TINY_EXPR_EXTENSION_FOR_MUSTACH
-else
-	lib_LDFLAGS += -lm
-	lib_objs += tinyexpr.o
-endif
-
-ifneq ("$(NO_EXTENSION_FOR_MUSTACH)", "")
-	CFLAGS += -DNO_EXTENSION_FOR_MUSTACH
-endif
-
-ifneq ("$(NO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH)", "")
-	CFLAGS += -DNO_COMPARE_VALUE_EXTENSION_FOR_MUSTACH
-endif
+CFLAGS = -fpic -Wall -Wextra
+lib_LDFLAGS  = -shared -lm
+lib_objs  = mustach.o kore_mustach.o tinyexpr.o
 
 all: libmustach.so$(SOVEREV) libkore_mustach.so
 

@@ -16,6 +16,19 @@
 
 #ifndef KORE_MUSTACH_H
 #define KORE_MUSTACH_H
+
+/**
+ * Flags specific to mustach wrap
+ */
+#define Mustach_With_SingleDot    4
+#define Mustach_With_Equal        8
+#define Mustach_With_Compare      16
+#define Mustach_With_JsonPointer  32
+#define Mustach_With_ObjectIter   64
+#define Mustach_With_IncPartial   128
+#define Mustach_With_EscFirstCmp  256
+#define Mustach_With_TinyExpr     512
+
 /*
  * kore_mustach - Renders the mustache 'template' in 'result' for 'data'.
  *
@@ -23,6 +36,7 @@
  * @data:       the data string to be parsed as a kore_json object
  * @partial_cb: the function to be called in the interface partial
  * @lambda_cb:  the function to be called in the interface lambda
+ * @flags:      the flags passed. @see https://gitlab.com/jobol/mustach#extensions
  * @result:     the pointer receiving the result when 0 is returned
  * @size:       the size of the returned result
  *
@@ -45,7 +59,7 @@
 int kore_mustach(const char *template, const char *data,
         int (*partial_cb)(const char *name, struct mustach_sbuf *sbuf),
         int (*lambda_cb)(const char *name, struct kore_buf *buf),
-        char **result, size_t *length);
+        int flags, char **result, size_t *length);
 /*
  * kore_mustach_json - Same as kore_mustach except instead of accepting a json
  *              string it requires a kore_json_item object.
@@ -53,5 +67,5 @@ int kore_mustach(const char *template, const char *data,
 int kore_mustach_json(const char *template, struct kore_json_item *json,
         int (*partial_cb)(const char *name, struct mustach_sbuf *sbuf),
         int (*lambda_cb)(const char *name, struct kore_buf *buf),
-        char **result, size_t *length);
+        int flags, char **result, size_t *length);
 #endif
