@@ -209,8 +209,8 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     if (cl->context == NULL)
         return (MUSTACH_OK);
 
-    if ((cl->flags & Mustach_With_ObjectIter)
-            && name[0] == '*' && name[1] == '\0')
+    if ((cl->flags & Mustach_With_ObjectIter) &&
+            name[0] == '*' && name[1] == '\0')
     {
         if (cl->context->name != NULL)
             sbuf->value = cl->context->name;
@@ -473,7 +473,7 @@ evalcomp(struct kore_json_item *o, const char *value, enum comp k, int flags)
 
     c = compare(o, value);
     switch (k) {
-        case C_eq: return (c == 0);
+        case C_eq: return ((flags & Mustach_With_Equal) ? c == 0 : 0);
         case C_lt: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c < 0 : 0);
         case C_le: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c <= 0 : 0);
         case C_gt: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c > 0 : 0);

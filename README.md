@@ -40,4 +40,4 @@ This implementation includes support for [TinyExpr](https://github.com/codeplea/
 
 Just put your expression in the mustache tag.
 
-Can be disabled by setting NO_TINY_EXPR_EXTENSION_FOR_MUSTACH=1 in the compiler flags.
+Pass the flag Mustach_With_TinyExpr or Mustach_With_AllExtensions to use it.
