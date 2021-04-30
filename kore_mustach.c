@@ -60,7 +60,7 @@ static struct kore_json_item    *json_item_in_stack(struct closure *, const char
 static char                     *json_get_self_value(struct kore_json_item *);
 static void                     keyval(char *, char **, enum comp *, int);
 static int                      compare(struct kore_json_item *, const char *);
-static int                      evalcomp(struct kore_json_item *, const char *, enum comp, int);
+static int                      evalcomp(struct kore_json_item *, const char *, enum comp);
 static int                      islambda(struct closure *, int *);
 static int                      split_string_pbrk(char *, const char *, char **, size_t);
 static double                   eval(struct closure *, const char *);
@@ -75,6 +75,9 @@ start(void *closure)
     cl->stack[0].root = cl->context;
     cl->stack[0].lambda = NULL;
     cl->stack[0].iterate = 0;
+
+    if (cl->flags & Mustach_With_Compare)
+        cl->flags |= Mustach_With_Equal;
 
     /* initialize our buffer with 8 kilobytes. */
     cl->result = kore_buf_alloc(8 << 10);
@@ -100,9 +103,9 @@ enter(void *closure, const char *name)
     cl->stack[cl->depth].lambda = NULL;
     cl->stack[cl->depth].iterate = 0;
 
-    if ((cl->flags & Mustach_With_ObjectIter) &&
-            name[0] == '*' && name[1] == '\0') {
-
+    if (name[0] == '*' && name[1] == '\0' &&
+            (cl->flags & Mustach_With_ObjectIter))
+    {
         if (cl->context->type == KORE_JSON_TYPE_OBJECT &&
                 (n = TAILQ_FIRST(&cl->context->data.items)) != NULL)
         {
@@ -124,7 +127,7 @@ enter(void *closure, const char *name)
                     cl->depth--;
                     return (0);
                 }
-                break;
+                return (1);
 
             case KORE_JSON_TYPE_ARRAY:
                 if ((n = TAILQ_FIRST(&item->data.items)) == NULL) {
@@ -133,19 +136,19 @@ enter(void *closure, const char *name)
                 }
                 cl->context = n;
                 cl->stack[cl->depth].iterate = 1;
-                break;
+                return (1);
 
             case KORE_JSON_TYPE_OBJECT:
-                if ((cl->flags & Mustach_With_ObjectIter) &&
-                        val != NULL && val[0] == '*' &&
-                        (n = TAILQ_FIRST(&item->data.items)) != NULL)
+                if (val != NULL && val[0] == '*' &&
+                        (n = TAILQ_FIRST(&item->data.items)) != NULL &&
+                        (cl->flags & Mustach_With_ObjectIter))
                 {
                     cl->context = n;
                     cl->stack[cl->depth].iterate = 1;
-                    break;
+                    return (1);
                 }
                 cl->context = item;
-                break;
+                return (1);
 
             case KORE_JSON_TYPE_STRING:
                 if (!memcmp(item->data.string, "(=>)\0", 5)) {
@@ -155,14 +158,13 @@ enter(void *closure, const char *name)
 
             default:
                 if (k != C_no && val != NULL &&
-                        (val[0] == '!' ? evalcomp(item, &val[1], k, cl->flags) : !evalcomp(item, val, k, cl->flags))) {
+                        (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k))) {
                     cl->depth--;
                     return (0);
                 }
                 cl->context = item;
+                return (1);
         }
-
-        return (1);
     }
 
     cl->depth--;
@@ -209,8 +211,8 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     if (cl->context == NULL)
         return (MUSTACH_OK);
 
-    if ((cl->flags & Mustach_With_ObjectIter) &&
-            name[0] == '*' && name[1] == '\0')
+    if (name[0] == '*' && name[1] == '\0' &&
+            (cl->flags & Mustach_With_ObjectIter))
     {
         if (cl->context->name != NULL)
             sbuf->value = cl->context->name;
@@ -218,8 +220,9 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         return (MUSTACH_OK);
     }
 
-    if ((cl->flags & Mustach_With_SingleDot) &&
-            name[0] == '.' && name[1] == '\0') {
+    if (name[0] == '.' && name[1] == '\0' &&
+            (cl->flags & Mustach_With_SingleDot))
+    {
         if ((value = json_get_self_value(cl->context)) != NULL) {
             sbuf->value = value;
             sbuf->freecb = kore_free;
@@ -230,7 +233,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     kore_strlcpy(key, name, sizeof(key));
     keyval(key, &val, &k, cl->flags);
     if ((item = json_item_in_stack(cl, key)) != NULL &&
-            ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k, cl->flags) : evalcomp(item, val, k, cl->flags))) || k == C_no) &&
+            ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
             (value = json_get_self_value(item)) != NULL)
     {
         sbuf->value = value;
@@ -381,7 +384,7 @@ keyval(char *key, char **val, enum comp *k, int flags)
                 continue;
 
             case '>':
-                if (flags & (Mustach_With_Equal | Mustach_With_Compare)) {
+                if (flags & Mustach_With_Compare) {
                     if (*++s == '=') {
                         *k = C_ge;
                         *val = ++s;
@@ -395,7 +398,7 @@ keyval(char *key, char **val, enum comp *k, int flags)
                 continue;
 
             case '<':
-                if (flags & (Mustach_With_Equal | Mustach_With_Compare)) {
+                if (flags & Mustach_With_Compare) {
                     if (*++s == '=') {
                         *k = C_le;
                         *val = ++s;
@@ -467,17 +470,17 @@ compare(struct kore_json_item *o, const char *value)
 }
 
 int
-evalcomp(struct kore_json_item *o, const char *value, enum comp k, int flags)
+evalcomp(struct kore_json_item *o, const char *value, enum comp k)
 {
     int c;
 
     c = compare(o, value);
     switch (k) {
-        case C_eq: return ((flags & Mustach_With_Equal) ? c == 0 : 0);
-        case C_lt: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c < 0 : 0);
-        case C_le: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c <= 0 : 0);
-        case C_gt: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c > 0 : 0);
-        case C_ge: return ((flags & (Mustach_With_Equal | Mustach_With_Compare)) ? c >= 0 : 0);
+        case C_eq: return (c == 0);
+        case C_lt: return (c < 0);
+        case C_le: return (c <= 0);
+        case C_gt: return (c > 0);
+        case C_ge: return (c >= 0);
         default: return (0);
     }
 }
