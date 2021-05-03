@@ -1,10 +1,19 @@
+# version
+MAJOR := 1
+MINOR := 1
+REVIS := 0
+
+# installation settings
 DESTDIR ?=
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
 LIBDIR  ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
-SOVER = .0
-SOVEREV = .0.99
+
+# initial settings
+VERSION := $(MAJOR).$(MINOR).$(REVIS)
+SOVER := .$(MAJOR)
+SOVEREV := .$(MAJOR).$(MINOR)
 
 HEADERS  = mustach.h kore_mustach.h
 CFLAGS = -fpic -Wall -Wextra
@@ -39,6 +48,6 @@ kore_mustach.o: mustach.h kore_mustach.h tinyexpr.h
 tinyexpr.o:		tinyexpr.h
 
 clean:
-	rm -f libkore_mustach.so libmustach.so$(SOVEREV) *.o
+	rm -f libkore_mustach.so libmustach.so* *.o
 
 .PHONY: install uninstall
