@@ -189,6 +189,9 @@ struct mustach_itf {
  *             Can be NULL.
  *
  * @closure: The closure to use for 'releasecb'.
+ *
+ * @length: Length of the value or zero if unknown and value null terminated.
+ *          To return the empty string, let it to zero and let value to NULL.
  */
 struct mustach_sbuf {
 	const char *value;
@@ -197,12 +200,14 @@ struct mustach_sbuf {
 		void (*releasecb)(const char *value, void *closure);
 	};
 	void *closure;
+	size_t length;
 };
 
 /**
  * mustach_file - Renders the mustache 'template' in 'file' for 'itf' and 'closure'.
  *
  * @template: the template string to instanciate
+ * @length:   length of the template or zero if unknown and template null terminated
  * @itf:      the interface to the functions that mustach calls
  * @closure:  the closure to pass to functions called
  * @file:     the file where to write the result
@@ -210,12 +215,13 @@ struct mustach_sbuf {
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int mustach_file(const char *template, struct mustach_itf *itf, void *closure, int flags, FILE *file);
+extern int mustach_file(const char *template, size_t length, const struct mustach_itf *itf, void *closure, int flags, FILE *file);
 
 /**
  * mustach_fd - Renders the mustache 'template' in 'fd' for 'itf' and 'closure'.
  *
  * @template: the template string to instanciate
+ * @length:   length of the template or zero if unknown and template null terminated
  * @itf:      the interface to the functions that mustach calls
  * @closure:  the closure to pass to functions called
  * @fd:       the file descriptor number where to write the result
@@ -223,12 +229,13 @@ extern int mustach_file(const char *template, struct mustach_itf *itf, void *clo
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int mustach_fd(const char *template, struct mustach_itf *itf, void *closure, int flags, int fd);
+extern int mustach_fd(const char *template, size_t length, const struct mustach_itf *itf, void *closure, int flags, int fd);
 
 /**
  * mustach_mem - Renders the mustache 'template' in 'result' for 'itf' and 'closure'.
  *
  * @template: the template string to instanciate
+ * @length:   length of the template or zero if unknown and template null terminated
  * @itf:      the interface to the functions that mustach calls
  * @closure:  the closure to pass to functions called
  * @result:   the pointer receiving the result when 0 is returned
@@ -237,14 +244,14 @@ extern int mustach_fd(const char *template, struct mustach_itf *itf, void *closu
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int mustach_mem(const char *template, struct mustach_itf *itf, void *closure, int flags, char **result, size_t *size);
+extern int mustach_mem(const char *template, size_t length, const struct mustach_itf *itf, void *closure, int flags, char **result, size_t *size);
 
 /**
  * OBSOLETE use mustach_file
  *
  * fmustach - Renders the mustache 'template' in 'file' for 'itf' and 'closure'.
  *
- * @template: the template string to instanciate
+ * @template: the template string to instanciate, null terminated
  * @itf:      the interface to the functions that mustach calls
  * @closure:  the closure to pass to functions called
  * @file:     the file where to write the result
@@ -252,14 +259,14 @@ extern int mustach_mem(const char *template, struct mustach_itf *itf, void *clos
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int fmustach(const char *template, struct mustach_itf *itf, void *closure, FILE *file);
+extern int fmustach(const char *template, const struct mustach_itf *itf, void *closure, FILE *file);
 
 /**
  * OBSOLETE use mustach_fd
  *
  * fdmustach - Renders the mustache 'template' in 'fd' for 'itf' and 'closure'.
  *
- * @template: the template string to instanciate
+ * @template: the template string to instanciate, null terminated
  * @itf:      the interface to the functions that mustach calls
  * @closure:  the closure to pass to functions called
  * @fd:       the file descriptor number where to write the result
@@ -267,14 +274,14 @@ extern int fmustach(const char *template, struct mustach_itf *itf, void *closure
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int fdmustach(const char *template, struct mustach_itf *itf, void *closure, int fd);
+extern int fdmustach(const char *template, const struct mustach_itf *itf, void *closure, int fd);
 
 /**
  * OBSOLETE use mustach_mem
  *
  * mustach - Renders the mustache 'template' in 'result' for 'itf' and 'closure'.
  *
- * @template: the template string to instanciate
+ * @template: the template string to instanciate, null terminated
  * @itf:      the interface to the functions that mustach calls
  * @closure:  the closure to pass to functions called
  * @result:   the pointer receiving the result when 0 is returned
@@ -283,7 +290,7 @@ extern int fdmustach(const char *template, struct mustach_itf *itf, void *closur
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int mustach(const char *template, struct mustach_itf *itf, void *closure, char **result, size_t *size);
+extern int mustach(const char *template, const struct mustach_itf *itf, void *closure, char **result, size_t *size);
 
 #endif
 
