@@ -599,7 +599,7 @@ kore_mustach_json(const char *template, struct kore_json_item *json,
         .lambda_cb = lambda_cb
     };
 
-    rc = mustach_file(template, &itf, &cl, flags, 0);
+    rc = mustach_file(template, 0, &itf, &cl, flags, 0);
     *result = (char *)kore_buf_release(cl.result, length);
     return (rc);
 }
