@@ -452,15 +452,21 @@ keyval(char *key, char **val, enum comp *k, int flags)
 int
 compare(struct kore_json_item *o, const char *value)
 {
+    double  d;
+    int64_t i;
+
     switch (o->type) {
         case KORE_JSON_TYPE_NUMBER:
-            return (o->data.number - strtod(value, NULL));
+            d = o->data.number - strtod(value, NULL);
+            return (d > 0 ? 1 : d < 0 ? -1 : 0);
 
         case KORE_JSON_TYPE_INTEGER:
-            return (o->data.integer - strtoll(value, NULL, 10));
+            i = o->data.integer - strtoll(value, NULL, 10);
+            return (i > 0 ? 1 : i < 0 ? -1 : 0);
 
         case KORE_JSON_TYPE_INTEGER_U64:
-            return (o->data.u64 - strtoull(value, NULL, 10));
+            i = o->data.u64 - strtoull(value, NULL, 10);
+            return (i > 0 ? 1 : i < 0 ? -1 : 0);
 
         case KORE_JSON_TYPE_STRING:
             return (strcmp(o->data.string, value));

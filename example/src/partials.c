@@ -45,7 +45,7 @@ partial_cb(const char *name, struct mustach_sbuf *sbuf)
     while (partials[i].name && partials[i].fp) {
         if (!strcmp(name, partials[i].name)) {
             sbuf->value = partials[i].fp;
-            break;
+            return (MUSTACH_OK);
         }
         i++;
     }
