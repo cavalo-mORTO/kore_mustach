@@ -104,11 +104,10 @@ enter(void *closure, const char *name)
     cl->stack[cl->depth].iterate = 0;
 
     if (name[0] == '*' && name[1] == '\0' &&
-            (cl->flags & Mustach_With_ObjectIter))
-    {
+            (cl->flags & Mustach_With_ObjectIter)) {
+
         if (cl->context->type == KORE_JSON_TYPE_OBJECT &&
-                (n = TAILQ_FIRST(&cl->context->data.items)) != NULL)
-        {
+                (n = TAILQ_FIRST(&cl->context->data.items)) != NULL) {
             cl->context = n;
             cl->stack[cl->depth].iterate = 1;
             return (1);
@@ -141,8 +140,7 @@ enter(void *closure, const char *name)
             case KORE_JSON_TYPE_OBJECT:
                 if (val != NULL && val[0] == '*' &&
                         (n = TAILQ_FIRST(&item->data.items)) != NULL &&
-                        (cl->flags & Mustach_With_ObjectIter))
-                {
+                        (cl->flags & Mustach_With_ObjectIter)) {
                     cl->context = n;
                     cl->stack[cl->depth].iterate = 1;
                     return (1);
@@ -190,8 +188,7 @@ next(void *closure)
     struct kore_json_item   *n;
 
     if (cl->stack[cl->depth].iterate &&
-            (n = TAILQ_NEXT(cl->context, list)) != NULL)
-    {
+            (n = TAILQ_NEXT(cl->context, list)) != NULL) {
         cl->context = n;
         return (1);
     }
@@ -212,8 +209,8 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         return (MUSTACH_OK);
 
     if (name[0] == '*' && name[1] == '\0' &&
-            (cl->flags & Mustach_With_ObjectIter))
-    {
+            (cl->flags & Mustach_With_ObjectIter)) {
+
         if (cl->context->name != NULL)
             sbuf->value = cl->context->name;
 
@@ -221,8 +218,8 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     }
 
     if (name[0] == '.' && name[1] == '\0' &&
-            (cl->flags & Mustach_With_SingleDot))
-    {
+            (cl->flags & Mustach_With_SingleDot)) {
+
         if ((value = json_get_self_value(cl->context)) != NULL) {
             sbuf->value = value;
             sbuf->freecb = kore_free;
@@ -234,8 +231,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     keyval(key, &val, &k, cl->flags);
     if ((item = json_item_in_stack(cl, key)) != NULL &&
             ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
-            (value = json_get_self_value(item)) != NULL)
-    {
+            (value = json_get_self_value(item)) != NULL) {
         sbuf->value = value;
         sbuf->freecb = kore_free;
         return (MUSTACH_OK);
@@ -264,7 +260,8 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
             (value = json_get_self_value(item)) != NULL) {
         sbuf->value = value;
         sbuf->freecb = kore_free;
-    } else if (cl->partial_cb != NULL) {
+    } else if ((cl->flags & Mustach_With_IncPartial) &&
+            cl->partial_cb != NULL) {
         return (cl->partial_cb(name, sbuf));
     }
 
@@ -373,15 +370,14 @@ keyval(char *key, char **val, enum comp *k, int flags)
     *val = NULL;
     *k = C_no;
 
-    for (o = s = key; *s != '\0'; s++) {
+    for (o = s = key; *s != '\0' && *val == NULL; s++) {
         switch (*s) {
             case '*':
                 if (flags & Mustach_With_ObjectIter) {
                     *val = "*";
-                    break;
+                    continue;
                 }
-                *o++ = *s;
-                continue;
+                break;
 
             case '>':
                 if (flags & Mustach_With_Compare) {
@@ -392,10 +388,9 @@ keyval(char *key, char **val, enum comp *k, int flags)
                         *k = C_gt;
                         *val = s;
                     }
-                    break;
+                    continue;
                 }
-                *o++ = *s;
-                continue;
+                break;
 
             case '<':
                 if (flags & Mustach_With_Compare) {
@@ -406,19 +401,17 @@ keyval(char *key, char **val, enum comp *k, int flags)
                         *k = C_lt;
                         *val = s;
                     }
-                    break;
+                    continue;
                 }
-                *o++ = *s;
-                continue;
+                break;
 
             case '=':
                 if (flags & Mustach_With_Equal) {
                     *k = C_eq;
                     *val = ++s;
-                    break;
+                    continue;
                 }
-                *o++ = *s;
-                continue;
+                break;
 
             case '~':
                 if (flags & Mustach_With_JsonPointer) {
@@ -427,24 +420,18 @@ keyval(char *key, char **val, enum comp *k, int flags)
                         case '0': *o++ = '~'; break;
                         default: *o++ = *--s; break;
                     }
-                } else {
-                    *o++ = *s;
+                    continue;
                 }
-                continue;
+                break;
 
             case '.':
                 *o++ = '/';
                 continue;
 
             case '\\':
-                *o++ = *++s;
-                continue;
-
-            default:
-                *o++ = *s;
-                continue;
+                s++;
         }
-        break;
+        *o++ = *s;
     }
     *o = '\0';
 }
@@ -593,14 +580,12 @@ kore_mustach_json(const char *template, struct kore_json_item *json,
     int rc;
     struct mustach_itf itf = {
         .start = start,
-        .put = NULL,
         .enter = enter,
         .next = next,
         .leave = leave,
         .partial = partial,
         .get = get,
         .emit = emit,
-        .stop = NULL
     };
     struct closure cl = {
         .context = json,
