@@ -379,28 +379,19 @@ keyval(char *key, char **val, enum comp *k, int flags)
                 }
                 break;
 
+            case '<':
             case '>':
                 if (flags & Mustach_With_Compare) {
-                    if (*++s == '=') {
-                        *k = C_ge;
-                        *val = ++s;
-                    } else {
-                        *k = C_gt;
-                        *val = s;
-                    }
-                    continue;
-                }
-                break;
-
-            case '<':
-                if (flags & Mustach_With_Compare) {
-                    if (*++s == '=') {
-                        *k = C_le;
-                        *val = ++s;
-                    } else {
+                    if (*s == '<')
                         *k = C_lt;
-                        *val = s;
+                    else
+                        *k = C_gt;
+
+                    if (*++s == '=') {
+                        (*k)++;
+                        s++;
                     }
+                    *val = s;
                     continue;
                 }
                 break;
