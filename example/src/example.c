@@ -1,12 +1,12 @@
 #include <ctype.h>
 #include <kore/kore.h>
+#include <kore/hooks.h>
 #include <kore/http.h>
 #include <mustach/mustach.h>
 #include <mustach/kore_mustach.h>
 
 #include "assets.h"
 
-int     partial_cb(const char *, struct mustach_sbuf *);
 int     asset_serve_mustach(struct http_request *, int, const void *, const void *);
 
 int		page(struct http_request *);
@@ -17,10 +17,33 @@ int     test4(struct http_request *);
 int     test5(struct http_request *);
 int     test6(struct http_request *);
 
-int     lambda_cb(const char *, struct kore_buf *);
-int     upper(struct kore_buf *);
-int     lower(struct kore_buf *);
-int     topipe(struct kore_buf *);
+void     upper(struct kore_buf *);
+void     lower(struct kore_buf *);
+void     topipe(struct kore_buf *);
+
+void
+kore_parent_configure(int argc, char *argv[])
+{
+    const char *fpaths[] = {
+        "assets",
+        "foo"
+    };
+    struct lambda l[] = {
+        {"upper", upper},
+        {"lower", lower},
+        {"lower", lower},
+    };
+
+    kore_mustach_sys_init();
+    kore_mustach_bind_partials(fpaths, 2);
+    kore_mustach_bind_lambdas(l, 3);
+}
+
+void
+kore_parent_teardown(void)
+{
+    kore_mustach_sys_cleanup();
+}
 
 int
 page(struct http_request *req)
@@ -31,16 +54,7 @@ page(struct http_request *req)
         "\"upper\": \"(=>)\","
         "\"num\": 234.43}";
 
-    char    *result;
-    size_t  len;
-
-    kore_mustach((const char *)asset_hello_html, json,
-            partial_cb, lambda_cb, Mustach_With_AllExtensions, &result, &len);
-
-    http_response(req, 200, result, len);
-    kore_free(result);
-
-    return (KORE_RESULT_OK);
+    return (asset_serve_mustach(req, 200, asset_hello_html, json));
 }
 
 int
@@ -76,64 +90,40 @@ test5(struct http_request *req)
 int
 test6(struct http_request *req)
 {
+    return (asset_serve_mustach(req, 200, asset_test6_must, asset_test6_json));
+}
+
+int
+asset_serve_mustach(struct http_request *req, int status, const void *template, const void *data)
+{
     char    *result;
     size_t  len;
 
-    kore_mustach((const char *)asset_test6_must, (const char *)asset_test6_json,
-            partial_cb, lambda_cb, Mustach_With_AllExtensions, &result, &len);
-
-    http_response(req, 200, result, len);
+    kore_mustach((const char *)template, (const char *)data, Mustach_With_AllExtensions, &result, &len);
+    http_response(req, status, result, len);
     kore_free(result);
 
     return (KORE_RESULT_OK);
 }
 
-int
-lambda_cb(const char *name, struct kore_buf *b)
-{
-    const struct {
-        const char  *name;
-        int         (*fn)(struct kore_buf *);
-    } lambdas[] = {
-        { "upper", upper },
-        { "lower", lower },
-        { "topipe", topipe },
-        { NULL, NULL },
-    };
-
-    int i = 0;
-    while (lambdas[i].name && lambdas[i].fn) {
-        if (!strcmp(lambdas[i].name, name)) {
-            lambdas[i].fn(b);
-            break;
-        }
-        i++;
-    }
-
-    return (KORE_RESULT_OK);
-}
-
-int
+void
 upper(struct kore_buf *b)
 {
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = toupper(*c);
-    return (KORE_RESULT_OK);
 }
 
-int
+void
 lower(struct kore_buf *b)
 {
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = tolower(*c);
-    return (KORE_RESULT_OK);
 }
 
-int
+void
 topipe(struct kore_buf *b)
 {
     kore_buf_replace_string(b, " ", "|", 1);
-    return (KORE_RESULT_OK);
 }

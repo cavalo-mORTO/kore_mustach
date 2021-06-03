@@ -13,21 +13,17 @@ The current source files are:
 
 - **mustach.c** core implementation of mustache in C
 - **mustach.h** header file for core definitions
-- **kore_mustach.c** implementation and integration of mustach with kore
+- **kore_mustach.h** header file for integration function definitions
+- **kore_mustach.c** implementation of mustach with kore
+- **kore_mustach_wrap.c** integration with kore
 - **example/** example usage of this implementation
-- **example/gen_partial.sh** tool used to generate partials.c
 
 To use this implementation run
 ```
 make install
 ```
-and link with -lkore_mustach.
+and link with -lkore_mustach. Might need to specify -L/usr/local/lib -Wl,-R/usr/local/lib.
 
-Then run
-```
-./gen_partial.sh
-```
-to link your assets/* with their respective file names.
 
 ## Lambda support
 

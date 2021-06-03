@@ -42,9 +42,6 @@ struct closure {
         struct kore_json_item   *lambda;
         int                     iterate;
     } stack[MUSTACH_MAX_DEPTH];
-
-    int     (*partial_cb)(const char *, struct mustach_sbuf *);
-    int     (*lambda_cb)(const char *, struct kore_buf *);
 };
 
 static int  start(void *);
@@ -260,9 +257,8 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
             (value = json_get_self_value(item)) != NULL) {
         sbuf->value = value;
         sbuf->freecb = kore_free;
-    } else if ((cl->flags & Mustach_With_IncPartial) &&
-            cl->partial_cb != NULL) {
-        return (cl->partial_cb(name, sbuf));
+    } else if (cl->flags & Mustach_With_IncPartial) {
+        return (kore_mustach_partial(name, sbuf));
     }
 
     return (MUSTACH_OK);
@@ -289,12 +285,10 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
          * kore_buf_replace_string(&tmp, "/", "&#x2F;", 6); */
     }
 
-    if (cl->lambda_cb != NULL) {
-        depth = cl->depth;
-        while (islambda(cl, &depth)) {
-            cl->lambda_cb(cl->stack[depth].lambda->name, &tmp);
-            depth--;
-        }
+    depth = cl->depth;
+    while (islambda(cl, &depth)) {
+        kore_mustach_lambda(cl->stack[depth].lambda->name, &tmp);
+        depth--;
     }
 
     kore_buf_append(cl->result, tmp.data, tmp.offset);
@@ -564,8 +558,6 @@ islambda(struct closure *cl, int *depth)
 
 int
 kore_mustach_json(const char *template, struct kore_json_item *json,
-        int (*partial_cb)(const char *, struct mustach_sbuf *),
-        int (*lambda_cb)(const char *, struct kore_buf *),
         int flags, char **result, size_t *length)
 {
     int rc;
@@ -581,8 +573,6 @@ kore_mustach_json(const char *template, struct kore_json_item *json,
     struct closure cl = {
         .context = json,
         .flags = flags,
-        .partial_cb = partial_cb,
-        .lambda_cb = lambda_cb
     };
 
     rc = mustach_file(template, 0, &itf, &cl, flags, 0);
@@ -592,23 +582,21 @@ kore_mustach_json(const char *template, struct kore_json_item *json,
 
 int
 kore_mustach(const char *template, const char *data,
-        int (*partial_cb)(const char *, struct mustach_sbuf *),
-        int (*lambda_cb)(const char *, struct kore_buf *),
         int flags, char **result, size_t *length)
 {
     struct kore_json    json;
     int                 rc;
 
     if (data == NULL) {
-        return (kore_mustach_json(template, NULL, partial_cb, lambda_cb, flags, result, length));
+        return (kore_mustach_json(template, NULL, flags, result, length));
     }
 
     kore_json_init(&json, data, strlen(data));
     if (kore_json_parse(&json)) {
-        rc = kore_mustach_json(template, json.root, partial_cb, lambda_cb, flags, result, length);
+        rc = kore_mustach_json(template, json.root, flags, result, length);
     } else {
         kore_log(LOG_NOTICE, "%s", kore_json_strerror());
-        rc = kore_mustach_json(template, NULL, partial_cb, lambda_cb, flags, result, length);
+        rc = kore_mustach_json(template, NULL, flags, result, length);
     }
 
     kore_json_cleanup(&json);
