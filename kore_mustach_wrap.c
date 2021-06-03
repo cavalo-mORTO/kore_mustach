@@ -124,17 +124,19 @@ kore_mustach_bind_lambdas(struct lambda lambda[], size_t len)
 int
 kore_mustach_partial(const char *name, struct mustach_sbuf *sbuf)
 {
-    struct asset *a;
-    struct wrapper w;
+    struct asset    *a;
+    struct wrapper  *w;
 
     a = asset_get(name);
     if (a != NULL) {
         sbuf->value = a->cache->data;
         sbuf->length = a->cache->len;
 
-        w.ptr = (void **)&a->cache;
+        w = kore_malloc(sizeof(*w));
+        w->ptr = (void **)&a->cache;
+
         sbuf->releasecb = releasecb;
-        sbuf->closure = &w;
+        sbuf->closure = w;
     }
 
     return (MUSTACH_OK);
@@ -165,6 +167,7 @@ releasecb(const char *value, void *closure)
     (void)value; /* unused */
 
     cache_ref_drop((struct cache **)w->ptr);
+    kore_free(w);
 }
 
 struct asset *
@@ -346,13 +349,13 @@ find_files(const char *path, void (*cb)(char *, struct dirent *))
 
 		if (S_ISDIR(st.st_mode)) {
 			find_files(fpath, cb);
-			free(fpath);
 		} else if (S_ISREG(st.st_mode)) {
 			cb(fpath, dp);
 		} else {
 			kore_log(LOG_NOTICE, "ignoring %s", fpath);
-			free(fpath);
 		}
+
+        free(fpath);
 	}
 
 	closedir(d);
@@ -363,5 +366,4 @@ file_cb(char *fpath, struct dirent *dp)
 {
     (void)dp; /* unused */
     asset_create(fpath);
-    free(fpath);
 }

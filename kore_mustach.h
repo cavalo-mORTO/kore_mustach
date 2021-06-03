@@ -63,11 +63,11 @@ struct lambda {
     TAILQ_ENTRY(lambda) list;
 };
 /*
- * kore_mustach_sys_init - Initialize out tailqs. Run this function in kore_parent_configure().
+ * kore_mustach_sys_init - Initialize our tailqs. Run this function in kore_parent_configure().
  */
 void    kore_mustach_sys_init(void);
 /*
- * kore_mustach_sys_cleanup - Cleanup out tailqs. Run this function in kore_parent_teardown().
+ * kore_mustach_sys_cleanup - Cleanup our tailqs. Run this function in kore_parent_teardown().
  */
 void    kore_mustach_sys_cleanup(void);
 /*
