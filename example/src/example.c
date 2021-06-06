@@ -31,12 +31,12 @@ kore_parent_configure(int argc, char *argv[])
     struct lambda l[] = {
         {"upper", upper},
         {"lower", lower},
-        {"lower", lower},
+        {"topipe", topipe},
     };
 
     kore_mustach_sys_init();
-    kore_mustach_bind_partials(fpaths, 2);
-    kore_mustach_bind_lambdas(l, 3);
+    kore_mustach_bind_partials(fpaths, sizeof(fpaths) / sizeof(fpaths[0]));
+    kore_mustach_bind_lambdas(l, sizeof(l) / sizeof(l[0]));
 }
 
 void

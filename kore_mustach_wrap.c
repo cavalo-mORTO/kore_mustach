@@ -43,12 +43,9 @@ struct asset {
     TAILQ_ENTRY(asset) list;
 };
 
-struct wrapper {
-    void    **ptr;
-};
-
 static TAILQ_HEAD(, asset)  assets;
 static TAILQ_HEAD(, lambda) lambdas;
+static int                  tailq_init = 0;
 
 static struct cache     *cache_create(void);
 static void             cache_ref_drop(struct cache **);
@@ -69,6 +66,7 @@ kore_mustach_sys_init(void)
 {
     TAILQ_INIT(&assets);
     TAILQ_INIT(&lambdas);
+    tailq_init = 1;
 
 #if defined(__linux__)
     kore_seccomp_filter("mustach", filter_mustach,
@@ -81,6 +79,11 @@ kore_mustach_sys_cleanup(void)
 {
     struct asset    *a;
     struct lambda   *l;
+
+    if (!tailq_init) {
+        kore_log(LOG_NOTICE, "(%s): must run kore_mustach_sys_init()", __func__);
+        return;
+    }
 
     while ((a = TAILQ_FIRST(&assets)) != NULL)
         asset_remove(a);
@@ -97,6 +100,11 @@ kore_mustach_bind_partials(const char *fpath[], size_t len)
 {
     size_t i;
 
+    if (!tailq_init) {
+        kore_log(LOG_NOTICE, "(%s): must run kore_mustach_sys_init()", __func__);
+        return (KORE_RESULT_ERROR);
+    }
+
     for (i = 0; i < len; i++) {
         if (dir_exists(fpath[i]))
             find_files(fpath[i], file_cb);
@@ -112,6 +120,11 @@ kore_mustach_bind_lambdas(struct lambda lambda[], size_t len)
     struct lambda   *l;
     size_t i;
 
+    if (!tailq_init) {
+        kore_log(LOG_NOTICE, "(%s): must run kore_mustach_sys_init()", __func__);
+        return (KORE_RESULT_ERROR);
+    }
+
     for (i = 0; i < len; i++) {
         l = kore_calloc(1, sizeof(*l));
         l->name = kore_strdup(lambda[i].name);
@@ -125,18 +138,19 @@ int
 kore_mustach_partial(const char *name, struct mustach_sbuf *sbuf)
 {
     struct asset    *a;
-    struct wrapper  *w;
+
+    if (!tailq_init) {
+        kore_log(LOG_NOTICE, "(%s): must run kore_mustach_sys_init()", __func__);
+        return (MUSTACH_OK);
+    }
 
     a = asset_get(name);
     if (a != NULL) {
         sbuf->value = a->cache->data;
         sbuf->length = a->cache->len;
 
-        w = kore_malloc(sizeof(*w));
-        w->ptr = (void **)&a->cache;
-
         sbuf->releasecb = releasecb;
-        sbuf->closure = w;
+        sbuf->closure = a;
     }
 
     return (MUSTACH_OK);
@@ -146,6 +160,11 @@ int
 kore_mustach_lambda(const char *name, struct kore_buf *buf)
 {
     struct lambda *l;
+
+    if (!tailq_init) {
+        kore_log(LOG_NOTICE, "(%s): must run kore_mustach_sys_init()", __func__);
+        return (MUSTACH_OK);
+    }
 
     l = NULL;
     TAILQ_FOREACH(l, &lambdas, list) {
@@ -162,12 +181,11 @@ kore_mustach_lambda(const char *name, struct kore_buf *buf)
 void
 releasecb(const char *value, void *closure)
 {
-    struct wrapper  *w = closure;
+    struct asset  *a = closure;
 
     (void)value; /* unused */
 
-    cache_ref_drop((struct cache **)w->ptr);
-    kore_free(w);
+    cache_ref_drop(&a->cache);
 }
 
 struct asset *

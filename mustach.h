@@ -246,6 +246,17 @@ extern int mustach_fd(const char *template, size_t length, const struct mustach_
  */
 extern int mustach_mem(const char *template, size_t length, const struct mustach_itf *itf, void *closure, int flags, char **result, size_t *size);
 
+/***************************************************************************
+* compatibility with version before 1.0
+*/
+#ifdef __GNUC__
+#define DEPRECATED_MUSTACH(func) func __attribute__ ((deprecated))
+#elif defined(_MSC_VER)
+#define DEPRECATED_MUSTACH(func) __declspec(deprecated) func
+#elif !defined(DEPRECATED_MUSTACH)
+#pragma message("WARNING: You need to implement DEPRECATED_MUSTACH for this compiler")
+#define DEPRECATED_MUSTACH(func) func
+#endif
 /**
  * OBSOLETE use mustach_file
  *
@@ -259,7 +270,7 @@ extern int mustach_mem(const char *template, size_t length, const struct mustach
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int fmustach(const char *template, const struct mustach_itf *itf, void *closure, FILE *file);
+DEPRECATED_MUSTACH(extern int fmustach(const char *template, const struct mustach_itf *itf, void *closure, FILE *file));
 
 /**
  * OBSOLETE use mustach_fd
@@ -274,7 +285,7 @@ extern int fmustach(const char *template, const struct mustach_itf *itf, void *c
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int fdmustach(const char *template, const struct mustach_itf *itf, void *closure, int fd);
+DEPRECATED_MUSTACH(extern int fdmustach(const char *template, const struct mustach_itf *itf, void *closure, int fd));
 
 /**
  * OBSOLETE use mustach_mem
@@ -290,7 +301,7 @@ extern int fdmustach(const char *template, const struct mustach_itf *itf, void *
  * Returns 0 in case of success, -1 with errno set in case of system error
  * a other negative value in case of error.
  */
-extern int mustach(const char *template, const struct mustach_itf *itf, void *closure, char **result, size_t *size);
+DEPRECATED_MUSTACH(extern int mustach(const char *template, const struct mustach_itf *itf, void *closure, char **result, size_t *size));
 
 #endif
 

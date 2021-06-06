@@ -54,7 +54,7 @@ static int  emit(void *, const char *, size_t, int, FILE *);
 
 static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *);
 static struct kore_json_item    *json_item_in_stack(struct closure *, const char *);
-static char                     *json_get_self_value(struct kore_json_item *);
+static void                     json_tosbuf(struct kore_json_item *, struct mustach_sbuf *);
 static void                     keyval(char *, char **, enum comp *, int);
 static int                      compare(struct kore_json_item *, const char *);
 static int                      evalcomp(struct kore_json_item *, const char *, enum comp);
@@ -216,21 +216,15 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 
     if (name[0] == '.' && name[1] == '\0' &&
             (cl->flags & Mustach_With_SingleDot)) {
-
-        if ((value = json_get_self_value(cl->context)) != NULL) {
-            sbuf->value = value;
-            sbuf->freecb = kore_free;
-        }
+        json_tosbuf(cl->context, sbuf);
         return (MUSTACH_OK);
     }
 
     kore_strlcpy(key, name, sizeof(key));
     keyval(key, &val, &k, cl->flags);
     if ((item = json_item_in_stack(cl, key)) != NULL &&
-            ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) &&
-            (value = json_get_self_value(item)) != NULL) {
-        sbuf->value = value;
-        sbuf->freecb = kore_free;
+            ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no)) {
+        json_tosbuf(item, sbuf);
         return (MUSTACH_OK);
     }
 
@@ -249,14 +243,10 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
 {
     struct closure          *cl = closure;
     struct kore_json_item   *item;
-    const char              *value;
 
     sbuf->value = "";
-    if (cl->context != NULL &&
-            (item = json_item_in_stack(cl, name)) != NULL &&
-            (value = json_get_self_value(item)) != NULL) {
-        sbuf->value = value;
-        sbuf->freecb = kore_free;
+    if (cl->context != NULL && (item = json_item_in_stack(cl, name)) != NULL) {
+        json_tosbuf(item, sbuf);
     } else if (cl->flags & Mustach_With_IncPartial) {
         return (kore_mustach_partial(name, sbuf));
     }
@@ -314,30 +304,31 @@ json_get_item(struct kore_json_item *o, const char *name)
     return (NULL);
 }
 
-char *
-json_get_self_value(struct kore_json_item *o)
+void
+json_tosbuf(struct kore_json_item *o, struct mustach_sbuf *sbuf)
 {
-    size_t          len;
     char            b[256], *name;
     struct kore_buf buf;
    
     switch (o->type) {
         case KORE_JSON_TYPE_STRING:
-            return (kore_strdup(o->data.string));
+            sbuf->value = kore_strdup(o->data.string);
+            break;
 
         case KORE_JSON_TYPE_NUMBER:
-            snprintf(b, sizeof(b), "%.9g", o->data.number);
-            return (kore_strdup(b));
+            sbuf->length = snprintf(b, sizeof(b), "%.9g", o->data.number);
+            sbuf->value = kore_strdup(b);
+            break;
 
         default:
             name = o->name;
             o->name = NULL;
             kore_buf_init(&buf, 1024);
             kore_json_item_tobuf(o, &buf);
-            kore_buf_append(&buf, "\0", 1);
             o->name = name;
-            return ((char *)kore_buf_release(&buf, &len));
+            sbuf->value = (char *)kore_buf_release(&buf, &sbuf->length);
     }
+    sbuf->freecb = kore_free;
 }
 
 struct kore_json_item *
