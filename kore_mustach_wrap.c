@@ -81,7 +81,7 @@ kore_mustach_sys_cleanup(void)
 }
 
 int
-kore_mustach_bind_partials(const char *fpath[], size_t len)
+kore_mustach_bind_partials(const char * const *fpath, size_t nelems)
 {
     size_t i;
 
@@ -90,7 +90,7 @@ kore_mustach_bind_partials(const char *fpath[], size_t len)
         return (KORE_RESULT_ERROR);
     }
 
-    for (i = 0; i < len; i++) {
+    for (i = 0; i < nelems; i++) {
         if (nftw(fpath[i], ftw_cb, 20, FTW_PHYS | FTW_MOUNT) == -1) {
             kore_log(LOG_NOTICE, "nftw: %s", errno_s);
         }
@@ -99,7 +99,7 @@ kore_mustach_bind_partials(const char *fpath[], size_t len)
 }
 
 int
-kore_mustach_bind_lambdas(struct lambda lambda[], size_t len)
+kore_mustach_bind_lambdas(const struct lambda *lambda, size_t nelems)
 {
     struct lambda   *l;
     size_t i;
@@ -109,7 +109,7 @@ kore_mustach_bind_lambdas(struct lambda lambda[], size_t len)
         return (KORE_RESULT_ERROR);
     }
 
-    for (i = 0; i < len; i++) {
+    for (i = 0; i < nelems; i++) {
         l = kore_calloc(1, sizeof(*l));
         l->name = kore_strdup(lambda[i].name);
         l->cb = lambda[i].cb;

@@ -29,6 +29,8 @@
 #define Mustach_With_EscFirstCmp  256
 #define Mustach_With_TinyExpr     512
 
+struct lambda; /* see below */
+
 /*
  * kore_mustach - Renders the mustache 'template' in 'result' for 'data'.
  *
@@ -48,6 +50,42 @@ int kore_mustach(const char *template, const char *data, int flags, char **resul
  */
 int kore_mustach_json(const char *template, struct kore_json_item *json, int flags, char **result, size_t *length);
 /*
+ * kore_mustach_sys_init - Initialize our tailqs. Run this function in kore_parent_configure().
+ */
+void kore_mustach_sys_init(void);
+/*
+ * kore_mustach_sys_cleanup - Cleanup our tailqs. Run this function in kore_parent_teardown().
+ */
+void kore_mustach_sys_cleanup(void);
+/*
+ * kore_mustach_bind_partials - Bind our files to their filenames.
+ *                              Run this function only after kore_mustach_sys_init().
+ *
+ * @fpath:  List of filenames or directory names to be traversed and read into memory,
+ *          as they're needed.
+ * @nelems: Number of elements in fpath.
+ */
+int kore_mustach_bind_partials(const char * const *fpath, size_t nelems);
+/*
+ * kore_mustach_bind_lambdas - Bind our lambdas to their names.
+ *                             Run this function only after kore_mustach_sys_init().
+ *
+ * @lambda: List of lambdas to be traversed.
+ * @nelems: Number of elements in lambdas.
+ *
+ * A struct lambda binds a lambda's name to its callback.
+ */
+int kore_mustach_bind_lambdas(const struct lambda *lambda, size_t nelems);
+/*
+ * kore_mustach_partial - Find partial of 'name' and set 'sbuf' to its contents.
+ */
+int kore_mustach_partial(const char *name, struct mustach_sbuf *sbuf);
+/*
+ * kore_mustach_lambda - Find lambda of 'name' and run its callback passing 'buf' as
+ *                       its argument.
+ */
+int kore_mustach_lambda(const char *name, struct kore_buf *buf);
+/*
  * struct lambda - Bind a lambda's 'name' to its callback 'cb'.
  *
  * 'buf' contains the content of the lambda, already rendered.
@@ -62,41 +100,5 @@ struct lambda {
 
     TAILQ_ENTRY(lambda) list;
 };
-/*
- * kore_mustach_sys_init - Initialize our tailqs. Run this function in kore_parent_configure().
- */
-void    kore_mustach_sys_init(void);
-/*
- * kore_mustach_sys_cleanup - Cleanup our tailqs. Run this function in kore_parent_teardown().
- */
-void    kore_mustach_sys_cleanup(void);
-/*
- * kore_mustach_bind_partials - Bind our files to their filenames.
- *                              Run this function only after kore_mustach_sys_init().
- *
- * @fpath:  List of filenames or directory names to be traversed and read into memory,
- *          as they're needed.
- * @len:    Number of elements in fpath.
- */
-int     kore_mustach_bind_partials(const char **fpath, size_t len);
-/*
- * kore_mustach_bind_lambdas - Bind our lambdas to their names.
- *                             Run this function only after kore_mustach_sys_init().
- *
- * @lambdas:    List of lambdas to be traversed.
- * @len:        Number of elements in lambdas.
- *
- * A struct lambda binds a lambda's name to its callback.
- */
-int     kore_mustach_bind_lambdas(struct lambda *lambdas, size_t len);
-/*
- * kore_mustach_partial - Find partial of 'name' and set 'sbuf' to its contents.
- */
-int     kore_mustach_partial(const char *name, struct mustach_sbuf *sbuf);
-/*
- * kore_mustach_lambda - Find lambda of 'name' and run its callback passing 'buf' as
- *                       its argument.
- */
-int     kore_mustach_lambda(const char *name, struct kore_buf *buf);
 
 #endif
