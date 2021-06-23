@@ -290,15 +290,19 @@ struct kore_json_item *
 json_get_item(struct kore_json_item *o, const char *name)
 {
     struct kore_json_item   *item;
-    int                     type;
+    uint32_t                type;
 
     if (name == NULL)
         return (NULL);
 
     for (type = KORE_JSON_TYPE_OBJECT;
             type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2) {
+
         if ((item = kore_json_find(o, name, type)) != NULL)
             return (item);
+
+        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
+            return (NULL);
     }
 
     return (NULL);

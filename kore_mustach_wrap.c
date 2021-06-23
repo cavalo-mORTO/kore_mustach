@@ -110,10 +110,21 @@ kore_mustach_bind_lambdas(const struct lambda *lambda, size_t nelems)
     }
 
     for (i = 0; i < nelems; i++) {
-        l = kore_calloc(1, sizeof(*l));
-        l->name = kore_strdup(lambda[i].name);
-        l->cb = lambda[i].cb;
-        TAILQ_INSERT_TAIL(&lambdas, l, list);
+
+        l = NULL;
+        TAILQ_FOREACH(l, &lambdas, list) {
+            if (!strcmp(lambda[i].name, l->name)) {
+                kore_log(LOG_NOTICE, "(%s): %s already exists", __func__, lambda[i].name);
+                break;
+            }
+        }
+
+        if (l == NULL) {
+            l = kore_calloc(1, sizeof(*l));
+            l->name = kore_strdup(lambda[i].name);
+            l->cb = lambda[i].cb;
+            TAILQ_INSERT_TAIL(&lambdas, l, list);
+        }
     }
     return (KORE_RESULT_OK);
 }
@@ -226,10 +237,19 @@ asset_create(const char *fpath, size_t fsize)
 {
     struct asset *a;
 
-    a = kore_calloc(1, sizeof(*a));
-    a->path = kore_strdup(fpath);
-    a->fsize = fsize;
-    TAILQ_INSERT_TAIL(&assets, a, list);
+    TAILQ_FOREACH(a, &assets, list) {
+        if (!strcmp(a->path, fpath)) {
+            kore_log(LOG_NOTICE, "(%s): %s already exists", __func__, fpath);
+            break;
+        }
+    }
+
+    if (a == NULL) {
+        a = kore_calloc(1, sizeof(*a));
+        a->path = kore_strdup(fpath);
+        a->fsize = fsize;
+        TAILQ_INSERT_TAIL(&assets, a, list);
+    }
 
     return (a);
 }
