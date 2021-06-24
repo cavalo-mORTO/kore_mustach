@@ -146,8 +146,9 @@ enter(void *closure, const char *name)
                 return (1);
 
             case KORE_JSON_TYPE_STRING:
-                if (!memcmp(item->data.string, "(=>)\0", 5)) {
+                if (!strcmp(item->data.string, "(=>)")) {
                     cl->stack[cl->depth].lambda = item;
+                    return (1);
                 }
                 /* fallthrough */
 
@@ -587,6 +588,7 @@ kore_mustach(const char *template, const char *data,
     }
 
     kore_json_init(&json, data, strlen(data));
+
     if (kore_json_parse(&json)) {
         rc = kore_mustach_json(template, json.root, flags, result, length);
     } else {

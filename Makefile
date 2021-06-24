@@ -51,4 +51,4 @@ tinyexpr.o:		tinyexpr.h
 clean:
 	rm -f libkore_mustach.so libmustach.so* *.o
 
-.PHONY: install uninstall
+.PHONY: install uninstall all clean
