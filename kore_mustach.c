@@ -297,13 +297,10 @@ json_get_item(struct kore_json_item *o, const char *name)
         return (NULL);
 
     for (type = KORE_JSON_TYPE_OBJECT;
-            type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2) {
+            type <= KORE_JSON_TYPE_LITERAL; type++) {
 
         if ((item = kore_json_find(o, name, type)) != NULL)
             return (item);
-
-        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
-            return (NULL);
     }
 
     return (NULL);
@@ -421,24 +418,12 @@ int
 compare(struct kore_json_item *o, const char *value)
 {
     double      d;
-    int64_t     i;
-    uint64_t    u;
 
     switch (o->type) {
         case KORE_JSON_TYPE_NUMBER:
             d = strtod(value, NULL);
             return (o->data.number > d ? 1 :
                     o->data.number < d ? -1 : 0);
-
-        case KORE_JSON_TYPE_INTEGER:
-            i = strtoll(value, NULL, 10);
-            return (o->data.integer > i ? 1 :
-                    o->data.integer < i ? -1 : 0);
-
-        case KORE_JSON_TYPE_INTEGER_U64:
-            u = strtoull(value, NULL, 10);
-            return (o->data.u64 > u ? 1 :
-                    o->data.u64 < u ? -1 : 0);
 
         case KORE_JSON_TYPE_STRING:
             return (strcmp(o->data.string, value));
@@ -515,12 +500,6 @@ eval(struct closure *cl, const char *expression)
                 case KORE_JSON_TYPE_NUMBER:
                     d[i] = o->data.number;
                     break;
-                case KORE_JSON_TYPE_INTEGER:
-                    d[i] = o->data.integer;
-                    break;
-                case KORE_JSON_TYPE_INTEGER_U64:
-                    d[i] = o->data.u64;
-                    break;
                 default:
                     d[i] = NAN;
             }
@@ -587,12 +566,11 @@ kore_mustach(const char *template, const char *data,
         return (kore_mustach_json(template, NULL, flags, result, length));
     }
 
-    kore_json_init(&json, data, strlen(data));
-
+    kore_json_init(&json, (uint8_t *)data, strlen(data));
     if (kore_json_parse(&json)) {
         rc = kore_mustach_json(template, json.root, flags, result, length);
     } else {
-        kore_log(LOG_NOTICE, "%s", kore_json_strerror());
+        kore_log(LOG_NOTICE, "%s", kore_json_strerror(&json));
         rc = kore_mustach_json(template, NULL, flags, result, length);
     }
 
