@@ -301,9 +301,6 @@ json_get_item(struct kore_json_item *o, const char *name)
 
         if ((item = kore_json_find(o, name, type)) != NULL)
             return (item);
-
-        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
-            return (NULL);
     }
 
     return (NULL);
@@ -432,8 +429,8 @@ compare(struct kore_json_item *o, const char *value)
 
         case KORE_JSON_TYPE_INTEGER:
             i = strtoll(value, NULL, 10);
-            return (o->data.integer > i ? 1 :
-                    o->data.integer < i ? -1 : 0);
+            return (o->data.s64 > i ? 1 :
+                    o->data.s64 < i ? -1 : 0);
 
         case KORE_JSON_TYPE_INTEGER_U64:
             u = strtoull(value, NULL, 10);
@@ -516,7 +513,7 @@ eval(struct closure *cl, const char *expression)
                     d[i] = o->data.number;
                     break;
                 case KORE_JSON_TYPE_INTEGER:
-                    d[i] = o->data.integer;
+                    d[i] = o->data.s64;
                     break;
                 case KORE_JSON_TYPE_INTEGER_U64:
                     d[i] = o->data.u64;
@@ -592,7 +589,7 @@ kore_mustach(const char *template, const char *data,
     if (kore_json_parse(&json)) {
         rc = kore_mustach_json(template, json.root, flags, result, length);
     } else {
-        kore_log(LOG_NOTICE, "%s", kore_json_strerror());
+        kore_log(LOG_NOTICE, "%s", kore_json_strerror(&json));
         rc = kore_mustach_json(template, NULL, flags, result, length);
     }
 

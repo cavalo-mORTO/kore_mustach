@@ -4,7 +4,7 @@
 `mustach` [gitlab](https://gitlab.com/jobol/mustach), of [mustache](http://mustache.github.io "main site for mustache")
 template specification.
 
-Requires kore latest [commit](https://git.kore.io/kore).
+Compatible with kore version 4.1.0 through 4.1.0-rc2 [refs](https://git.kore.io/kore/refs).
 
 
 ## Using kore mustach
