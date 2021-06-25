@@ -22,6 +22,15 @@
 #include "mustach.h"
 #include "kore_mustach.h"
 
+#if defined(__linux__)
+#include <kore/seccomp.h>
+
+static struct sock_filter filter_mustach[] = {
+	KORE_SYSCALL_ALLOW(getdents64),
+	KORE_SYSCALL_ALLOW(newfstatat),
+};
+#endif
+
 struct cache {
     uint32_t        refs;
     char            *data;
@@ -30,7 +39,7 @@ struct cache {
 
 struct asset {
     char            *path;
-    size_t          fsize;
+    struct stat     sb;
     struct cache    *cache;
 
     TAILQ_ENTRY(asset) list;
@@ -43,11 +52,11 @@ static int                  tailq_init = 0;
 static struct cache     *cache_create(void);
 static void             cache_ref_drop(struct cache **);
 static struct asset     *asset_get(const char *);
-static struct asset     *asset_create(const char *, size_t);
+static struct asset     *asset_create(const char *, const struct stat *);
 static void             asset_remove(struct asset *);
 static void             file_open(const char *, int, int *);
 static void             file_close(int);
-static void             file_read(int, size_t, char **, size_t *);
+static void             file_read(int, const struct stat *, char **, size_t *);
 static void             releasecb(const char *, void *);
 static int              ftw_cb(const char *, const struct stat *, int, struct FTW *);
 
@@ -57,6 +66,11 @@ kore_mustach_sys_init(void)
     TAILQ_INIT(&assets);
     TAILQ_INIT(&lambdas);
     tailq_init = 1;
+
+#if defined(__linux__)
+    kore_seccomp_filter("mustach", filter_mustach,
+            KORE_FILTER_LEN(filter_mustach));
+#endif
 }
 
 void
@@ -199,7 +213,7 @@ asset_get(const char *name)
     if (a->cache == NULL) {
         a->cache = cache_create();
         file_open(a->path, O_RDONLY, &fd);
-        file_read(fd, a->fsize, &a->cache->data, &a->cache->len);
+        file_read(fd, &a->sb, &a->cache->data, &a->cache->len);
         file_close(fd);
     }
 
@@ -232,7 +246,7 @@ cache_ref_drop(struct cache **ptr)
 }
 
 struct asset *
-asset_create(const char *fpath, size_t fsize)
+asset_create(const char *fpath, const struct stat *sb)
 {
     struct asset *a;
 
@@ -247,10 +261,11 @@ asset_create(const char *fpath, size_t fsize)
         TAILQ_INSERT_TAIL(&assets, a, list);
     }
 
-    if (a->cache != NULL)
+    if (a->sb.st_mtime != sb->st_mtime &&
+            a->cache != NULL)
         cache_ref_drop(&a->cache);
 
-    a->fsize = fsize;
+    memcpy(&a->sb, sb, sizeof(*sb));
     return (a);
 }
 
@@ -281,20 +296,20 @@ file_close(int fd)
 }
 
 void
-file_read(int fd, size_t fsize, char **buf, size_t *len)
+file_read(int fd, const struct stat *sb, char **buf, size_t *len)
 {
 	char		*p;
 	ssize_t		ret;
-	size_t		offset;
+	off_t		offset;
 
-	if (fsize > USHRT_MAX)
+	if (sb->st_size > USHRT_MAX)
 		fatal("file_read: way too big");
 
 	offset = 0;
-	p = kore_malloc(fsize);
+	p = kore_malloc(sb->st_size);
 
-	while (offset != fsize) {
-		ret = read(fd, p + offset, fsize - offset);
+	while (offset != sb->st_size) {
+		ret = read(fd, p + offset, sb->st_size - offset);
 		if (ret == -1) {
 			if (errno == EINTR)
 				continue;
@@ -304,11 +319,11 @@ file_read(int fd, size_t fsize, char **buf, size_t *len)
 		if (ret == 0)
 			fatal("unexpected EOF");
 
-		offset += (size_t)ret;
+		offset += (off_t)ret;
 	}
 
 	*buf = p;
-	*len = fsize;
+	*len = sb->st_size;
 }
 
 int
@@ -320,7 +335,7 @@ ftw_cb(const char *fpath, const struct stat *sb,
 
     if (S_ISREG(sb->st_mode) &&
             sb->st_size <= USHRT_MAX)
-        asset_create(fpath, sb->st_size);
+        asset_create(fpath, sb);
 
     return (0);
 }
