@@ -9,6 +9,8 @@
 
 int     asset_serve_mustach(struct http_request *, int, const void *, const void *);
 
+void    tick(void *, uint64_t);
+
 int		page(struct http_request *);
 int     test1(struct http_request *);
 int     test2(struct http_request *);
@@ -21,28 +23,44 @@ void     upper(struct kore_buf *);
 void     lower(struct kore_buf *);
 void     topipe(struct kore_buf *);
 
-void
-kore_parent_configure(int argc, char *argv[])
-{
-    const char *fpaths[] = {
-        "assets",
-        "foo"
-    };
-    struct lambda l[] = {
-        {"upper", upper},
-        {"lower", lower},
-        {"topipe", topipe},
-    };
+static const char *fpaths[] = {
+    "assets",
+};
 
+static struct lambda l[] = {
+    {"upper", upper},
+    {"lower", lower},
+    {"topipe", topipe},
+};
+
+void
+kore_parent_configure(int argc, char **argv)
+{
     kore_mustach_sys_init();
     kore_mustach_bind_partials(fpaths, sizeof(fpaths) / sizeof(fpaths[0]));
     kore_mustach_bind_lambdas(l, sizeof(l) / sizeof(l[0]));
 }
 
 void
-kore_parent_teardown(void)
+kore_worker_configure(void)
+{
+    /* if you want to track changes in your partials at runtime */
+    kore_timer_add(tick, 1000, NULL, 0);
+}
+
+void
+kore_worker_teardown(void)
 {
     kore_mustach_sys_cleanup();
+}
+
+void
+tick(void *unused, uint64_t now)
+{
+    (void)unused;
+    (void)now;
+
+    kore_mustach_bind_partials(fpaths, sizeof(fpaths) / sizeof(fpaths[0]));
 }
 
 int
