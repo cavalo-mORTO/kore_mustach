@@ -35,7 +35,6 @@ struct closure {
     struct kore_buf         *result;
     int                     flags;
     int                     depth;
-    size_t                  depth_max;
 
     struct {
         struct kore_json_item   *root;
@@ -68,7 +67,6 @@ start(void *closure)
     struct closure          *cl = closure;
 
     cl->depth = 0;
-    cl->depth_max = sizeof(cl->stack) / sizeof(cl->stack[0]);
     cl->stack[0].root = cl->context;
     cl->stack[0].lambda = NULL;
     cl->stack[0].iterate = 0;
@@ -93,7 +91,7 @@ enter(void *closure, const char *name)
     if (cl->context == NULL)
         return (0);
 
-    if ((size_t)++cl->depth >= cl->depth_max)
+    if ((size_t)++cl->depth >= sizeof(cl->stack) / sizeof(cl->stack[0]))
         return (MUSTACH_ERROR_TOO_DEEP);
 
     cl->stack[cl->depth].root = cl->context;
@@ -231,7 +229,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 
     if (cl->flags & Mustach_With_TinyExpr) {
         d = eval(cl, name);
-        if (!isnan(d) && asprintf(&value, "%.9g", d) > -1 ) {
+        if (!isnan(d) && asprintf(&value, "%.9g", d) > -1) {
             sbuf->value = value;
             sbuf->freecb = free;
         }
@@ -264,7 +262,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
 
     (void)file; /* unused */
         
-    kore_buf_init(&tmp, size + 1);
+    kore_buf_init(&tmp, size);
     kore_buf_append(&tmp, buffer, size);
 
     if (escape) {
@@ -297,7 +295,7 @@ json_get_item(struct kore_json_item *o, const char *name)
         return (NULL);
 
     for (type = KORE_JSON_TYPE_OBJECT;
-            type <= KORE_JSON_TYPE_INTEGER_U64; type *= 2) {
+            type <= KORE_JSON_TYPE_INTEGER_U64; type <<= 1) {
 
         if ((item = kore_json_find(o, name, type)) != NULL)
             return (item);
@@ -312,7 +310,7 @@ json_get_item(struct kore_json_item *o, const char *name)
 void
 json_tosbuf(struct kore_json_item *o, struct mustach_sbuf *sbuf)
 {
-    char            b[256], *name;
+    char            b[128], *name;
     struct kore_buf buf;
    
     switch (o->type) {
@@ -328,7 +326,7 @@ json_tosbuf(struct kore_json_item *o, struct mustach_sbuf *sbuf)
         default:
             name = o->name;
             o->name = NULL;
-            kore_buf_init(&buf, 1024);
+            kore_buf_init(&buf, 128);
             kore_json_item_tobuf(o, &buf);
             o->name = name;
             sbuf->value = (char *)kore_buf_release(&buf, &sbuf->length);
@@ -427,18 +425,15 @@ compare(struct kore_json_item *o, const char *value)
     switch (o->type) {
         case KORE_JSON_TYPE_NUMBER:
             d = strtod(value, NULL);
-            return (o->data.number > d ? 1 :
-                    o->data.number < d ? -1 : 0);
+            return (o->data.number > d) - (o->data.number < d);
 
         case KORE_JSON_TYPE_INTEGER:
             i = strtoll(value, NULL, 10);
-            return (o->data.integer > i ? 1 :
-                    o->data.integer < i ? -1 : 0);
+            return (o->data.integer > i) - (o->data.integer < i);
 
         case KORE_JSON_TYPE_INTEGER_U64:
             u = strtoull(value, NULL, 10);
-            return (o->data.u64 > u ? 1 :
-                    o->data.u64 < u ? -1 : 0);
+            return (o->data.u64 > u) - (o->data.u64 < u);
 
         case KORE_JSON_TYPE_STRING:
             return (strcmp(o->data.string, value));
@@ -475,18 +470,15 @@ split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
     ap = out;
     count = 0;
 
-    if (ap < &out[ele - 1]) {
+    while (ap < &out[ele - 1]) {
+
         *ap++ = s;
         count++;
-    }
 
-    while (ap < &out[ele - 1] &&
-            (s = strpbrk(s, accept)) != NULL) {
+        if ((s = strpbrk(s, accept)) == NULL)
+            break;
 
         *s++ = '\0';
-        if (*s == '\0') break;
-        *ap++ = s;
-        count++;
     }
 
     *ap = NULL;
@@ -498,9 +490,9 @@ eval(struct closure *cl, const char *expression)
 {
     const char  *accept = "+-*/^%(), ";
     struct kore_json_item *o;
-    double      d[256], result;
-    char        *vars_s[256], *copy;
-    te_variable vars[256];
+    double      d[128], result;
+    char        *vars_s[128], *copy;
+    te_variable vars[128];
     te_expr     *expr;
     int         i, len, n;
 
@@ -588,7 +580,6 @@ kore_mustach(const char *template, const char *data,
     }
 
     kore_json_init(&json, data, strlen(data));
-
     if (kore_json_parse(&json)) {
         rc = kore_mustach_json(template, json.root, flags, result, length);
     } else {

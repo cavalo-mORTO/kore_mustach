@@ -15,8 +15,10 @@ VERSION := $(MAJOR).$(MINOR).$(REVIS)
 SOVER := .$(MAJOR)
 SOVEREV := .$(MAJOR).$(MINOR)
 
-HEADERS  = mustach.h kore_mustach.h
-CFLAGS = -fpic -Wall -Wextra
+HEADERS = mustach.h kore_mustach.h
+CFLAGS+=-Wall -Wmissing-declarations -Wshadow
+CFLAGS+=-Wstrict-prototypes -Wmissing-prototypes
+CFLAGS+=-Wpointer-arith -Wcast-qual -Wsign-compare
 lib_LDFLAGS  = -shared -lm
 lib_objs  = mustach.o kore_mustach.o kore_mustach_wrap.o tinyexpr.o
 
