@@ -191,7 +191,6 @@ releasecb(const char *value, void *closure)
     struct asset  *a = closure;
 
     (void)value; /* unused */
-
     cache_ref_drop(&a->cache);
 }
 
