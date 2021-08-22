@@ -7,7 +7,6 @@
 #include "assets.h"
 
 int asset_serve_mustach(struct http_request *, int, const void *, const void *);
-void tick(void *, uint64_t);
 
 int hello(struct http_request *);
 int handler(struct http_request *);
@@ -16,12 +15,11 @@ void upper(struct kore_buf *);
 void lower(struct kore_buf *);
 void topipe(struct kore_buf *);
 
-static const char *fpaths[] = { "assets" };
-
-static struct lambda l[] = {
-    {"upper", upper},
-    {"lower", lower},
-    {"topipe", topipe},
+static struct lambda my_lambdas[] = {
+    { "upper", upper },
+    { "lower", lower },
+    { "topipe", topipe },
+    { NULL, NULL }
 };
 
 static struct {
@@ -41,32 +39,6 @@ void
 kore_parent_configure(int argc, char **argv)
 {
     kore_default_getopt(argc, argv);
-
-    kore_mustach_sys_init();
-    kore_mustach_bind_partials(fpaths, sizeof(fpaths) / sizeof(fpaths[0]));
-    kore_mustach_bind_lambdas(l, sizeof(l) / sizeof(l[0]));
-}
-
-void
-kore_worker_configure(void)
-{
-    /* if you want to track changes in your partials at runtime */
-    kore_timer_add(tick, 1000, NULL, 0);
-}
-
-void
-kore_worker_teardown(void)
-{
-    kore_mustach_sys_cleanup();
-}
-
-void
-tick(void *unused, uint64_t now)
-{
-    (void)unused;
-    (void)now;
-
-    kore_mustach_bind_partials(fpaths, sizeof(fpaths) / sizeof(fpaths[0]));
 }
 
 int
@@ -98,6 +70,18 @@ hello(struct http_request *req)
         "\"num\": 234.43}";
 
     return (asset_serve_mustach(req, 200, asset_hello_html, json));
+}
+
+int
+asset_serve_mustach(struct http_request *req, int status, const void *template, const void *data)
+{
+    char *result;
+    size_t len;
+
+    kore_mustach(req, template, data, Mustach_With_AllExtensions, my_lambdas, &result, &len);
+    http_response(req, status, result, len);
+    kore_free(result);
+    return (KORE_RESULT_OK);
 }
 
 void

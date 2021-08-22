@@ -142,7 +142,7 @@ static int iwrap_emit(void *closure, const char *buffer, size_t size, int escape
 	(void)closure; /* unused */
 
 	if (!escape)
-		return fwrite(buffer, size, 1, file) != 1 ? MUSTACH_ERROR_SYSTEM : MUSTACH_OK;
+		return fwrite(buffer, 1, size, file) != size ? MUSTACH_ERROR_SYSTEM : MUSTACH_OK;
 
 	i = 0;
 	while (i < size) {
