@@ -84,7 +84,7 @@ static int                      split_string_pbrk(char *, const char *, char **,
 static double                   eval(struct closure *, const char *);
 static void                     partial_tosbuf(struct closure *, const char *, struct mustach_sbuf *);
 static void                     releasecb(const char *, void *);
-static void                     run_lambda(struct closure *, const char *, struct kore_buf *);
+static void                     run_lambda(struct lambda *, const char *, struct kore_buf *);
 
 int
 start(void *closure)
@@ -101,8 +101,12 @@ start(void *closure)
     if (cl->flags & Mustach_With_Compare)
         cl->flags |= Mustach_With_Equal;
 
-    /* initialize our buffer with 8 kilobytes. */
-    cl->result = kore_buf_alloc(8 << 10);
+    /* initialize our buffer */
+    cl->result = kore_buf_alloc(4096);
+
+    /* json root must be an object, otherwise there might undefined behavior */
+    if (cl->context->type != KORE_JSON_TYPE_OBJECT)
+        return (MUSTACH_ERROR_INVALID_ITF);
 
     return (MUSTACH_OK);
 }
@@ -301,7 +305,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
 
     depth = cl->depth;
     while (islambda(cl, &depth)) {
-        run_lambda(cl, cl->stack[depth].lambda->name, &tmp);
+        run_lambda(cl->lambdas, cl->stack[depth].lambda->name, &tmp);
         depth--;
     }
 
@@ -615,23 +619,26 @@ releasecb(const char *value, void *closure)
 }
 
 void
-run_lambda(struct closure *cl, const char *name, struct kore_buf *buf)
+run_lambda(struct lambda *lambdas, const char *name, struct kore_buf *buf)
 {
-    int i;
-
-    if (cl->lambdas == NULL)
+    if (lambdas == NULL)
         return;
 
-    i = 0;
-    while (cl->lambdas[i].name != NULL &&
-            cl->lambdas[i].cb != NULL) {
-
-        if (!strcmp(name, cl->lambdas[i].name)) {
-            cl->lambdas[i].cb(buf);
+    for (int i = 0; lambdas[i].name != NULL && lambdas[i].cb != NULL; i++) {
+        if (!strcmp(name, lambdas[i].name)) {
+            lambdas[i].cb(buf);
             return;
         }
-        i++;
     }
+}
+
+int
+kore_mustach_errno(void)
+{
+    if (kore_json_errno() != KORE_JSON_ERR_NONE)
+        return (kore_json_errno());
+
+    return (mustach_errno);
 }
 
 const char *
@@ -640,6 +647,9 @@ kore_mustach_strerror(void)
     if (mustach_errno >= 0 &&
             (size_t)mustach_errno < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
         return (mustach_errtab[mustach_errno]);
+
+    if (kore_json_errno() != KORE_JSON_ERR_NONE)
+        return (kore_json_strerror());
 
     return ("unknown mustach error");
 }
@@ -669,7 +679,7 @@ kore_mustach_json(struct http_request *req, const char *template, struct kore_js
     *result = (char *)kore_buf_release(cl.result, length);
 
     mustach_errno = rc * -1;
-    return (rc == MUSTACH_OK);
+    return (rc == MUSTACH_OK ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
 int
@@ -679,9 +689,8 @@ kore_mustach(struct http_request *req, const char *template, const char *data,
     struct kore_json    json;
     int                 rc;
 
-    if (data == NULL) {
+    if (data == NULL)
         return (kore_mustach_json(req, template, NULL, flags, lambdas, result, length));
-    }
 
     kore_json_init(&json, data, strlen(data));
     if (kore_json_parse(&json)) {

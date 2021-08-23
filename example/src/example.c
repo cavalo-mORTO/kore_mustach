@@ -4,6 +4,14 @@
 #include <kore/http.h>
 #include <mustach/mustach.h>
 #include <mustach/kore_mustach.h>
+
+#if defined(__linux__)
+#include <kore/seccomp.h>
+
+KORE_SECCOMP_FILTER("my_filter",
+        KORE_SYSCALL_ALLOW(newfstatat))
+#endif
+
 #include "assets.h"
 
 int asset_serve_mustach(struct http_request *, int, const void *, const void *);
@@ -49,14 +57,10 @@ handler(struct http_request *req)
     len = sizeof(tests) / sizeof(tests[0]);
     for (i = 0; i < len; i++) {
         if (!strcmp(req->path, tests[i].uri))
-            break;
+            return (asset_serve_mustach(req, 200, tests[i].template, tests[i].data));
     }
 
-    if (i < len)
-        return (asset_serve_mustach(req, 200, tests[i].template, tests[i].data));
-    else
-        http_response(req, 500, NULL, 0);
-
+    http_response(req, 404, NULL, 0);
     return (KORE_RESULT_OK);
 }
 

@@ -36,14 +36,13 @@ struct lambda; /* see below */
  *
  * @req:        the http_request needed to include other files, only works with tls enabled. can be NULL
  * @template:   the template string to instanciate
- * @data:       the data string to be parsed as a kore_json object
+ * @data:       the data string to be parsed as a kore_json object. can be NULL
  * @flags:      the flags passed. @see https://gitlab.com/jobol/mustach#extensions
  * @lambdas:    a null terminated list of lambdas. can be NULL
  * @result:     the pointer receiving the result when 0 is returned
  * @size:       the size of the returned result
  *
- * Returns 0 in case of success, -1 with errno set in case of system error
- * a other negative value in case of error.
+ * Returns KORE_RESULT_OK in case of success or KORE_RESULT_ERROR in case of error.
  */
 int kore_mustach(struct http_request *req, const char *template, const char *data,
         int flags, struct lambda *lambdas, char **result, size_t *length);
@@ -67,7 +66,10 @@ struct lambda {
     void    (*cb)(struct kore_buf *buf);
 };
 
-/* kore_mustach_strerror - Log mustach's error */
+/* kore_mustach_errno - Return mustach's error code */
+int kore_mustach_errno(void);
+
+/* kore_mustach_strerror - Return mustach's error as string */
 const char *kore_mustach_strerror(void);
 
 #endif
