@@ -644,9 +644,11 @@ kore_mustach_errno(void)
 const char *
 kore_mustach_strerror(void)
 {
-    if (mustach_errno >= 0 &&
-            (size_t)mustach_errno < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
-        return (mustach_errtab[mustach_errno]);
+    int i = mustach_errno * -1;
+
+    if (i >= 0 &&
+            (size_t)i < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
+        return (mustach_errtab[i]);
 
     if (kore_json_errno() != KORE_JSON_ERR_NONE)
         return (kore_json_strerror());
@@ -658,7 +660,6 @@ int
 kore_mustach_json(struct http_request *req, const char *template, struct kore_json_item *json,
         int flags, struct lambda *lambdas, char **result, size_t *length)
 {
-    int rc;
     struct mustach_itf itf = {
         .start = start,
         .enter = enter,
@@ -675,11 +676,10 @@ kore_mustach_json(struct http_request *req, const char *template, struct kore_js
         .flags = flags,
     };
 
-    rc = mustach_file(template, 0, &itf, &cl, flags, 0);
+    mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
     *result = (char *)kore_buf_release(cl.result, length);
 
-    mustach_errno = rc * -1;
-    return (rc == MUSTACH_OK ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+    return (mustach_errno == MUSTACH_OK ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
 int
