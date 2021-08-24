@@ -31,16 +31,16 @@ static struct lambda my_lambdas[] = {
 };
 
 static struct {
-    const char *uri;
+    const char uri;
     const void *template;
     const void *data;
 } tests[] = {
-    {"/t1", asset_test1_must, asset_test1_json},
-    {"/t2", asset_test2_must, asset_test2_json},
-    {"/t3", asset_test3_must, asset_test3_json},
-    {"/t4", asset_test4_must, asset_test4_json},
-    {"/t5", asset_test5_must, asset_test5_json},
-    {"/t6", asset_test6_must, asset_test6_json},
+    {'1', asset_test1_must, asset_test1_json},
+    {'2', asset_test2_must, asset_test2_json},
+    {'3', asset_test3_must, asset_test3_json},
+    {'4', asset_test4_must, asset_test4_json},
+    {'5', asset_test5_must, asset_test5_json},
+    {'6', asset_test6_must, asset_test6_json},
 };
 
 void
@@ -52,11 +52,8 @@ kore_parent_configure(int argc, char **argv)
 int
 handler(struct http_request *req)
 {
-    size_t i, len;
-
-    len = sizeof(tests) / sizeof(tests[0]);
-    for (i = 0; i < len; i++) {
-        if (!strcmp(req->path, tests[i].uri))
+    for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        if (req->path[strlen(req->path) - 1] == tests[i].uri)
             return (asset_serve_mustach(req, 200, tests[i].template, tests[i].data));
     }
 
