@@ -16,6 +16,7 @@
 
 #define _GNU_SOURCE
 #include <math.h>
+#include <float.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <kore/kore.h>
@@ -105,7 +106,8 @@ start(void *closure)
     cl->result = kore_buf_alloc(4096);
 
     /* json root must be an object, otherwise there might undefined behavior */
-    if (cl->context->type != KORE_JSON_TYPE_OBJECT)
+    if (cl->context != NULL &&
+            cl->context->type != KORE_JSON_TYPE_OBJECT)
         return (MUSTACH_ERROR_INVALID_ITF);
 
     return (MUSTACH_OK);
@@ -258,9 +260,11 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         json_tosbuf(item, sbuf);
     } else if (cl->flags & Mustach_With_TinyExpr) {
         d = eval(cl, name);
-        if (!isnan(d) && asprintf(&value, "%.9g", d) > -1) {
+        if (!isnan(d)) {
+            value = kore_malloc(50);
+            sprintf(value, "%.9g", d);
             sbuf->value = value;
-            sbuf->freecb = free;
+            sbuf->freecb = kore_free;
         }
     }
 
@@ -450,19 +454,20 @@ compare(struct kore_json_item *o, const char *value)
     double      d;
     int64_t     i;
     uint64_t    u;
+    int         err;
 
     switch (o->type) {
         case KORE_JSON_TYPE_NUMBER:
-            d = strtod(value, NULL);
-            return (o->data.number > d) - (o->data.number < d);
+            d = kore_strtodouble(value, DBL_MIN, DBL_MAX, &err);
+            return (!err) ? 0 : (o->data.number > d) - (o->data.number < d);
 
         case KORE_JSON_TYPE_INTEGER:
-            i = strtoll(value, NULL, 10);
-            return (o->data.integer > i) - (o->data.integer < i);
+            i = kore_strtonum64(value, 1, &err);
+            return (!err) ? 0 : (o->data.integer > i) - (o->data.number < i);
 
         case KORE_JSON_TYPE_INTEGER_U64:
-            u = strtoull(value, NULL, 10);
-            return (o->data.u64 > u) - (o->data.u64 < u);
+            u = kore_strtonum64(value, 0, &err);
+            return (!err) ? 0 : (o->data.u64 > u) - (o->data.u64 < u);
 
         case KORE_JSON_TYPE_STRING:
             return (strcmp(o->data.string, value));
@@ -644,11 +649,11 @@ kore_mustach_errno(void)
 const char *
 kore_mustach_strerror(void)
 {
-    int i = mustach_errno * -1;
+    int err = mustach_errno * -1;
 
-    if (i >= 0 &&
-            (size_t)i < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
-        return (mustach_errtab[i]);
+    if (err >= 0 &&
+            (size_t)err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
+        return (mustach_errtab[err]);
 
     if (kore_json_errno() != KORE_JSON_ERR_NONE)
         return (kore_json_strerror());
@@ -686,20 +691,17 @@ int
 kore_mustach(struct http_request *req, const char *template, const char *data,
         int flags, struct lambda *lambdas, char **result, size_t *length)
 {
-    struct kore_json    json;
-    int                 rc;
+    struct kore_json_item *item = NULL;
+    struct kore_json json;
+    int rc;
 
-    if (data == NULL)
-        return (kore_mustach_json(req, template, NULL, flags, lambdas, result, length));
-
-    kore_json_init(&json, data, strlen(data));
-    if (kore_json_parse(&json)) {
-        rc = kore_mustach_json(req, template, json.root, flags, lambdas, result, length);
-    } else {
-        kore_log(LOG_NOTICE, "%s", kore_json_strerror());
-        rc = kore_mustach_json(req, template, NULL, flags, lambdas, result, length);
+    if (data != NULL) {
+        kore_json_init(&json, data, strlen(data));
+        if (kore_json_parse(&json))
+            item = json.root;
     }
 
+    rc = kore_mustach_json(req, template, item, flags, lambdas, result, length);
     kore_json_cleanup(&json);
     return (rc);
 }
