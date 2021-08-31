@@ -463,7 +463,7 @@ compare(struct kore_json_item *o, const char *value)
 
         case KORE_JSON_TYPE_INTEGER:
             i = kore_strtonum64(value, 1, &err);
-            return (!err) ? 0 : (o->data.integer > i) - (o->data.number < i);
+            return (!err) ? 0 : (o->data.integer > i) - (o->data.integer < i);
 
         case KORE_JSON_TYPE_INTEGER_U64:
             u = kore_strtonum64(value, 0, &err);
