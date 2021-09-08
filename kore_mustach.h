@@ -34,7 +34,7 @@ struct lambda; /* see below */
 /*
  * kore_mustach - Renders the mustache 'template' in 'result' for 'data'.
  *
- * @req:        the http_request needed to include other files, only works with tls enabled. can be NULL
+ * @server_name: the kore_server name needed to include other files, only works with tls enabled. can be NULL
  * @template:   the template string to instanciate
  * @data:       the data string to be parsed as a kore_json object. can be NULL
  * @flags:      the flags passed. @see https://gitlab.com/jobol/mustach#extensions
@@ -44,13 +44,13 @@ struct lambda; /* see below */
  *
  * Returns KORE_RESULT_OK in case of success or KORE_RESULT_ERROR in case of error.
  */
-int kore_mustach(struct http_request *req, const char *template, const char *data,
+int kore_mustach(const char *server_name, const char *template, const char *data,
         int flags, struct lambda *lambdas, char **result, size_t *length);
 /*
  * kore_mustach_json - Same as kore_mustach except instead of accepting a json
  *              string it requires a kore_json_item object.
  */
-int kore_mustach_json(struct http_request *req, const char *template, struct kore_json_item *json,
+int kore_mustach_json(const char *server_name, const char *template, struct kore_json_item *json,
         int flags, struct lambda *lambdas, char **result, size_t *length);
 /*
  * struct lambda - Bind a lambda's 'name' to its callback 'cb'.

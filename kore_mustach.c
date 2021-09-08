@@ -25,6 +25,8 @@
 #include "kore_mustach.h"
 #include "tinyexpr.h"
 
+static const char *mustach_srv = NULL;
+
 static int mustach_errno = 0;
 
 static const char *mustach_errtab[] = {
@@ -57,7 +59,6 @@ struct closure {
     int                     flags;
     int                     depth;
 
-    struct http_request     *req;
     struct lambda           *lambdas;
     struct {
         struct kore_json_item   *root;
@@ -231,7 +232,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     struct closure          *cl = closure;
     struct kore_json_item   *item;
     enum comp               k;
-    char                    *val, *value, key[MUSTACH_MAX_LENGTH + 1];
+    char                    *val, dval[50], key[MUSTACH_MAX_LENGTH + 1];
     double                  d;
 
     sbuf->value = "";
@@ -261,9 +262,8 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
     } else if (cl->flags & Mustach_With_TinyExpr) {
         d = eval(cl, name);
         if (!isnan(d)) {
-            value = kore_malloc(50);
-            sprintf(value, "%.9g", d);
-            sbuf->value = value;
+            snprintf(dval, sizeof(dval), "%.9g", d);
+            sbuf->value = kore_strdup(dval);
             sbuf->freecb = kore_free;
         }
     }
@@ -343,7 +343,7 @@ json_get_item(struct kore_json_item *o, const char *name)
 void
 json_tosbuf(struct kore_json_item *o, struct mustach_sbuf *sbuf)
 {
-    char            b[128], *name;
+    char            b[50], *name;
     struct kore_buf buf;
    
     switch (o->type) {
@@ -359,7 +359,7 @@ json_tosbuf(struct kore_json_item *o, struct mustach_sbuf *sbuf)
         default:
             name = o->name;
             o->name = NULL;
-            kore_buf_init(&buf, 128);
+            kore_buf_init(&buf, 1024);
             kore_json_item_tobuf(o, &buf);
             o->name = name;
             sbuf->value = (char *)kore_buf_release(&buf, &sbuf->length);
@@ -581,15 +581,15 @@ islambda(struct closure *cl, int *depth)
 void
 partial_tosbuf(struct closure *cl, const char *path, struct mustach_sbuf *sbuf)
 {
+    struct kore_server  *srv;
     struct kore_fileref *ref;
-    struct kore_server *srv;
     struct stat st;
     int fd;
 
-    if (cl->req == NULL)
+    if (mustach_srv == NULL ||
+            (srv = kore_server_lookup(mustach_srv)) == NULL)
         return;
 
-    srv = cl->req->owner->owner->server;
     if ((ref = kore_fileref_get(path, srv->tls)) == NULL) {
         if ((fd = open(path, O_RDONLY | O_NOFOLLOW)) == -1)
             return;
@@ -649,20 +649,21 @@ kore_mustach_errno(void)
 const char *
 kore_mustach_strerror(void)
 {
-    int err = mustach_errno * -1;
-
-    if (err >= 0 &&
-            (size_t)err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
-        return (mustach_errtab[err]);
+    int err;
 
     if (kore_json_errno() != KORE_JSON_ERR_NONE)
         return (kore_json_strerror());
+
+    err = mustach_errno * -1;
+    if (err >= 0 &&
+            (size_t)err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
+        return (mustach_errtab[err]);
 
     return ("unknown mustach error");
 }
 
 int
-kore_mustach_json(struct http_request *req, const char *template, struct kore_json_item *json,
+kore_mustach_json(const char *server_name, const char *template, struct kore_json_item *json,
         int flags, struct lambda *lambdas, char **result, size_t *length)
 {
     struct mustach_itf itf = {
@@ -675,20 +676,21 @@ kore_mustach_json(struct http_request *req, const char *template, struct kore_js
         .emit = emit,
     };
     struct closure cl = {
-        .req = req,
         .lambdas = lambdas,
         .context = json,
         .flags = flags,
     };
 
+    mustach_srv = server_name;
     mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
     *result = (char *)kore_buf_release(cl.result, length);
 
+    mustach_srv = NULL;
     return (mustach_errno == MUSTACH_OK ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
 int
-kore_mustach(struct http_request *req, const char *template, const char *data,
+kore_mustach(const char *server_name, const char *template, const char *data,
         int flags, struct lambda *lambdas, char **result, size_t *length)
 {
     struct kore_json_item *item = NULL;
@@ -701,7 +703,7 @@ kore_mustach(struct http_request *req, const char *template, const char *data,
             item = json.root;
     }
 
-    rc = kore_mustach_json(req, template, item, flags, lambdas, result, length);
+    rc = kore_mustach_json(server_name, template, item, flags, lambdas, result, length);
     kore_json_cleanup(&json);
     return (rc);
 }

@@ -43,12 +43,6 @@ static struct {
     {'6', asset_test6_must, asset_test6_json},
 };
 
-void
-kore_parent_configure(int argc, char **argv)
-{
-    kore_default_getopt(argc, argv);
-}
-
 int
 handler(struct http_request *req)
 {
@@ -79,7 +73,7 @@ asset_serve_mustach(struct http_request *req, int status, const void *template, 
     char *result;
     size_t len;
 
-    kore_mustach(req, template, data, Mustach_With_AllExtensions, my_lambdas, &result, &len);
+    kore_mustach("tls", template, data, Mustach_With_AllExtensions, my_lambdas, &result, &len);
     http_response(req, status, result, len);
     kore_free(result);
     return (KORE_RESULT_OK);
