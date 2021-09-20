@@ -10,7 +10,7 @@
     { "name": "rip", "who": [ { "reviewer": "joe" }, { "reviewer": "jack" }, { "commiter": "greg" } ]  }
   ],
   "person?": { "name": "Jon" },
-  "special": "----{{extra}}----",
+  "special": "----{{extra}}----\n",
   "extra": 3.14159,
   "#sharp": "#",
   "!bang": "!",

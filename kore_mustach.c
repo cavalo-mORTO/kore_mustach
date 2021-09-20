@@ -84,7 +84,7 @@ static int                      evalcomp(struct kore_json_item *, const char *, 
 static int                      islambda(struct closure *, int *);
 static int                      split_string_pbrk(char *, const char *, char **, size_t);
 static double                   eval(struct closure *, const char *);
-static void                     partial_tosbuf(struct closure *, const char *, struct mustach_sbuf *);
+static void                     partial_tosbuf(const char *, struct mustach_sbuf *);
 static void                     releasecb(const char *, void *);
 static void                     run_lambda(struct lambda *, const char *, struct kore_buf *);
 
@@ -248,8 +248,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         return (MUSTACH_OK);
     }
 
-    if (name[0] == '.' && name[1] == '\0' &&
-            (cl->flags & Mustach_With_SingleDot)) {
+    if (name[0] == '.' && name[1] == '\0') {
         json_tosbuf(cl->context, sbuf);
         return (MUSTACH_OK);
     }
@@ -278,10 +277,10 @@ partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
     struct kore_json_item   *item;
 
     sbuf->value = "";
-    if (cl->context != NULL && (item = json_item_in_stack(cl, name)) != NULL) {
+    if (cl->context != NULL && (item = json_item_in_stack(cl, name)) != NULL)
         json_tosbuf(item, sbuf);
-    } else if (cl->flags & Mustach_With_IncPartial)
-        partial_tosbuf(cl, name, sbuf);
+    else
+        partial_tosbuf(name, sbuf);
 
     return (MUSTACH_OK);
 }
@@ -302,8 +301,8 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
         kore_buf_replace_string(&tmp, "&", "&amp;", 5);
         kore_buf_replace_string(&tmp, "<", "&lt;", 4);
         kore_buf_replace_string(&tmp, ">", "&gt;", 4);
+        kore_buf_replace_string(&tmp, "\"", "&quot;", 6);
         /* kore_buf_replace_string(&tmp, "\\", "&#39;", 5); 
-         * kore_buf_replace_string(&tmp, "\"", "&quot;", 6);
          * kore_buf_replace_string(&tmp, "/", "&#x2F;", 6); */
     }
 
@@ -579,7 +578,7 @@ islambda(struct closure *cl, int *depth)
 }
 
 void
-partial_tosbuf(struct closure *cl, const char *path, struct mustach_sbuf *sbuf)
+partial_tosbuf(const char *path, struct mustach_sbuf *sbuf)
 {
     struct kore_server  *srv;
     struct kore_fileref *ref;
