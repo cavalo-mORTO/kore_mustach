@@ -20,14 +20,17 @@
 /**
  * Flags specific to mustach wrap
  */
-#define Mustach_With_SingleDot    4
+#define Mustach_With_SingleDot    4     /* obsolete, always set */
 #define Mustach_With_Equal        8
 #define Mustach_With_Compare      16
 #define Mustach_With_JsonPointer  32
 #define Mustach_With_ObjectIter   64
-#define Mustach_With_IncPartial   128
+#define Mustach_With_IncPartial   128   /* obsolete, always set */
 #define Mustach_With_EscFirstCmp  256
 #define Mustach_With_TinyExpr     512
+
+#undef  Mustach_With_AllExtensions
+#define Mustach_With_AllExtensions  1023
 
 struct lambda; /* see below */
 

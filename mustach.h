@@ -29,12 +29,17 @@ struct mustach_sbuf; /* see below */
 #define MUSTACH_MAX_LENGTH 4096
 
 /**
+ * Maximum length of delimitors (2 normally but extended here)
+ */
+#define MUSTACH_MAX_DELIM_LENGTH 8
+
+/**
  * Flags specific to mustach core
  */
 #define Mustach_With_NoExtensions   0
-#define Mustach_With_AllExtensions -1
 #define Mustach_With_Colon          1
 #define Mustach_With_EmptyTag       2
+#define Mustach_With_AllExtensions  3
 
 /*
  * Definition of error codes returned by mustach
