@@ -693,7 +693,7 @@ kore_mustach(const char *server_name, const char *template, const char *data,
         int flags, struct lambda *lambdas, char **result, size_t *length)
 {
     struct kore_json_item *item = NULL;
-    struct kore_json json;
+    struct kore_json json = { 0 };
     int rc;
 
     if (data != NULL) {
