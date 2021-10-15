@@ -30,12 +30,3 @@ and link with -lkore_mustach. Might need to specify -L/usr/local/lib -Wl,-R/usr/
 ## Lambda support
 
 A lambda must be defined as a string consisting exclusively of "(=>)" in the hash.
-
-
-## Integration with TinyExpr
-
-This implementation includes support for [TinyExpr](https://github.com/codeplea/tinyexpr).
-
-Just put your expression in the mustache tag.
-
-Pass the flag Mustach_With_TinyExpr or Mustach_With_AllExtensions to use it.

@@ -1,7 +1,7 @@
 {
   "name": "Chris",
   "value": 10000,
-  "taxed_value": 6000,
+  "taxed_value": "(=>)",
   "in_ca": true,
   "person": false,
   "repo": [

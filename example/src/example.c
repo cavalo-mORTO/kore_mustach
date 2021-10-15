@@ -19,14 +19,18 @@ int asset_serve_mustach(struct http_request *, int, const void *, const void *);
 int hello(struct http_request *);
 int handler(struct http_request *);
 
-void upper(struct kore_buf *);
-void lower(struct kore_buf *);
-void topipe(struct kore_buf *);
+void upper(struct kore_json_item *, struct kore_buf *);
+void lower(struct kore_json_item *, struct kore_buf *);
+void bold(struct kore_json_item *, struct kore_buf *);
+void topipe(struct kore_json_item *, struct kore_buf *);
+void taxed_value(struct kore_json_item *, struct kore_buf *);
 
 static struct lambda my_lambdas[] = {
     { "upper", upper },
     { "lower", lower },
+    { "bold", bold },
     { "topipe", topipe },
+    { "taxed_value", taxed_value },
     { NULL, NULL }
 };
 
@@ -62,8 +66,10 @@ hello(struct http_request *req)
         "\"msg\": \"This is an integration of mustache templates with kore.\","
         "\"literal\": true,"
         "\"upper\": \"(=>)\","
+        "\"bold\": \"(=>)\","
         "\"num\": 234.43}";
 
+    http_response_header(req, "content-type", "text/html");
     return (asset_serve_mustach(req, 200, asset_hello_html, json));
 }
 
@@ -73,30 +79,50 @@ asset_serve_mustach(struct http_request *req, int status, const void *template, 
     char *result;
     size_t len;
 
-    kore_mustach("tls", template, data, Mustach_With_AllExtensions, my_lambdas, &result, &len);
+    if (!kore_mustach("tls", template, data, Mustach_With_AllExtensions, my_lambdas, &result, &len))
+        kore_log(LOG_NOTICE, kore_mustach_strerror());
+
     http_response(req, status, result, len);
     kore_free(result);
     return (KORE_RESULT_OK);
 }
 
-void
-upper(struct kore_buf *b)
+void upper(struct kore_json_item *ctx, struct kore_buf *b)
 {
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = toupper(*c);
 }
 
-void
-lower(struct kore_buf *b)
+void lower(struct kore_json_item *ctx, struct kore_buf *b)
 {
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = tolower(*c);
 }
 
-void
-topipe(struct kore_buf *b)
+void topipe(struct kore_json_item *ctx, struct kore_buf *b)
 {
     kore_buf_replace_string(b, " ", "|", 1);
+}
+
+void taxed_value(struct kore_json_item *ctx, struct kore_buf *b)
+{
+    struct kore_json_item *o;
+
+    if ((o = kore_json_find_integer(ctx, "value")) != NULL)
+        kore_buf_appendf(b, "%g", o->data.integer * 0.6);
+}
+
+void bold(struct kore_json_item *ctx, struct kore_buf *b)
+{
+    char *s;
+    size_t len;
+
+    kore_buf_stringify(b, &len);
+    s = kore_strdup((char *)b->data);
+
+    kore_buf_reset(b);
+    kore_buf_appendf(b, "<b> %s </b>", s);
+    kore_free(s);
 }

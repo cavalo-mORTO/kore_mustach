@@ -20,7 +20,7 @@ CFLAGS+=-Wall -Wmissing-declarations -Wshadow
 CFLAGS+=-Wstrict-prototypes -Wmissing-prototypes
 CFLAGS+=-Wpointer-arith -Wcast-qual -Wsign-compare
 lib_LDFLAGS  = -shared -lm
-lib_objs  = mustach.o kore_mustach.o tinyexpr.o
+lib_objs  = mustach.o kore_mustach.o
 
 all: libmustach.so$(SOVEREV) libkore_mustach.so
 
@@ -46,8 +46,7 @@ libmustach.so$(SOVEREV): mustach.o
 	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libmustach.so$(SOVEREV) mustach.o
 
 mustach.o:      mustach.h
-kore_mustach.o: mustach.h kore_mustach.h tinyexpr.h
-tinyexpr.o:		tinyexpr.h
+kore_mustach.o: mustach.h kore_mustach.h
 
 clean:
 	rm -f libkore_mustach.so libmustach.so* *.o

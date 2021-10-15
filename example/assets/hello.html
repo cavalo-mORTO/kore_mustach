@@ -3,13 +3,15 @@
 <body>
     <h1>{{ hello }}</h1>
     <p>{{ msg }}</p>
-    <p>sqrt({{ num }}) = {{ sqrt(num) }}</p>
+    <p>{{ num }}</p>
     <p>{{ literal }}</p>
     <p>
+        {{#bold}}
         {{#upper}}
         this is lowercase.
         {{ msg }}
         {{/upper}}
+        {{/bold}}
     </p>
 </body>
 </html>

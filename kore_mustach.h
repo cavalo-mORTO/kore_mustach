@@ -27,10 +27,9 @@
 #define Mustach_With_ObjectIter   64
 #define Mustach_With_IncPartial   128   /* obsolete, always set */
 #define Mustach_With_EscFirstCmp  256
-#define Mustach_With_TinyExpr     512
 
 #undef  Mustach_With_AllExtensions
-#define Mustach_With_AllExtensions  1023
+#define Mustach_With_AllExtensions  511
 
 struct lambda; /* see below */
 
@@ -58,15 +57,15 @@ int kore_mustach_json(const char *server_name, const char *template, struct kore
 /*
  * struct lambda - Bind a lambda's 'name' to its callback 'cb'.
  *
- * 'buf' contains the content of the lambda, already rendered.
- * User is free to manipulate the content of 'buf'.
+ * 'ctx' is the kore_json_item context currently being accessed.
+ * 'buf' contains the content of the lambda. User is free to manipulate the content of 'buf'.
  * 'buf' or its contents must not be freed. @see kore_buf.
  *
  * The lambda must be a string of 'name' that contains only '(=>)' in the hash.
  */
 struct lambda {
     char    *name;
-    void    (*cb)(struct kore_buf *buf);
+    void    (*cb)(struct kore_json_item *ctx, struct kore_buf *buf);
 };
 
 /* kore_mustach_errno - Return mustach's error code */
