@@ -17,7 +17,6 @@ The current source files are:
 - **mustach.h** header file for core definitions
 - **kore_mustach.h** header file for integration function definitions
 - **kore_mustach.c** implementation of mustach with kore
-- **kore_mustach_wrap.c** integration with kore
 - **example/** example usage of this implementation
 
 To use this implementation run
@@ -29,4 +28,4 @@ and link with -lkore_mustach. Might need to specify -L/usr/local/lib -Wl,-R/usr/
 
 ## Lambda support
 
-A lambda must be defined as a string consisting exclusively of "(=>)" in the hash.
+This implementation supports lambdas. Check kore_mustach.h for details.

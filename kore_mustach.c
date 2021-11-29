@@ -26,8 +26,6 @@
 
 #define KORE_JSON_TYPE_ALL	0x007F
 
-static const char *mustach_srv = NULL;
-
 static int mustach_errno = 0;
 
 static const char *mustach_errtab[] = {
@@ -54,19 +52,23 @@ enum comp {
 	C_ge = 10
 };
 
+struct stack {
+    struct kore_json_item   *root;
+    int                     iterate;
+    struct {
+        struct kore_json_item   *item;
+        struct kore_buf         *buf;
+        void    (*cb)(struct kore_json_item *item, struct kore_buf *buf);
+    } lambda_ctx;
+};
+
 struct closure {
     struct kore_json_item   *context;
     struct kore_buf         *result;
     int                     flags;
     int                     depth;
-
     struct lambda           *lambdas;
-    struct {
-        struct kore_json_item   *root;
-        int                     iterate;
-        const char              *lambda_name;
-        struct kore_buf         *lambda_ctx;
-    } stack[MUSTACH_MAX_DEPTH];
+    struct stack            stack[MUSTACH_MAX_DEPTH];
 };
 
 static int  start(void *);
@@ -86,26 +88,32 @@ static int                      evalcomp(struct kore_json_item *, const char *, 
 static int                      islambda(struct closure *);
 static void                     partial_tosbuf(const char *, struct mustach_sbuf *);
 static void                     releasecb(const char *, void *);
-static void                     run_lambda(struct closure *, const char *, struct kore_buf *);
+static struct lambda            *get_lambda(struct lambda *, const char *);
+static unsigned long            hash(const char *);
+
+static const struct mustach_itf itf = {
+    .start = start,
+    .enter = enter,
+    .next = next,
+    .leave = leave,
+    .partial = partial,
+    .get = get,
+    .emit = emit
+};
 
 int
 start(void *closure)
 {
-    struct closure          *cl = closure;
+    struct closure *cl = closure;
 
     mustach_errno = 0;
 
     cl->depth = 0;
-    cl->stack[0].root = cl->context;
-    cl->stack[0].lambda_name = NULL;
-    cl->stack[0].lambda_ctx = NULL;
-    cl->stack[0].iterate = 0;
+    cl->stack[cl->depth] = (struct stack){};
+    cl->stack[cl->depth].root = cl->context;
 
     if (cl->flags & Mustach_With_Compare)
         cl->flags |= Mustach_With_Equal;
-
-    /* initialize our buffer */
-    cl->result = kore_buf_alloc(4096);
 
     /* json root must be an object, otherwise there might undefined behavior */
     if (cl->context != NULL &&
@@ -119,6 +127,7 @@ int
 enter(void *closure, const char *name)
 {
     struct closure          *cl = closure;
+    struct lambda           *lambda;
     struct kore_json_item   *item, *n;
     enum comp               k;
     char                    key[MUSTACH_MAX_LENGTH + 1], *val;
@@ -129,10 +138,8 @@ enter(void *closure, const char *name)
     if ((size_t)++cl->depth >= sizeof(cl->stack) / sizeof(cl->stack[0]))
         return (MUSTACH_ERROR_TOO_DEEP);
 
+    cl->stack[cl->depth] = (struct stack){};
     cl->stack[cl->depth].root = cl->context;
-    cl->stack[cl->depth].lambda_name = NULL;
-    cl->stack[cl->depth].lambda_ctx = NULL;
-    cl->stack[cl->depth].iterate = 0;
 
     if (name[0] == '*' && name[1] == '\0' &&
             (cl->flags & Mustach_With_ObjectIter)) {
@@ -176,15 +183,6 @@ enter(void *closure, const char *name)
                 cl->context = item;
                 return (1);
 
-            case KORE_JSON_TYPE_STRING:
-                if (cl->lambdas != NULL &&
-                        !strcmp(item->data.string, "(=>)")) {
-                    cl->stack[cl->depth].lambda_name = item->name;
-                    cl->stack[cl->depth].lambda_ctx = kore_buf_alloc(128);
-                    return (1);
-                }
-                /* fallthrough */
-
             default:
                 if (k != C_no && val != NULL &&
                         (val[0] == '!' ? evalcomp(item, &val[1], k) : !evalcomp(item, val, k)))
@@ -195,6 +193,13 @@ enter(void *closure, const char *name)
         }
     }
 
+    if ((lambda = get_lambda(cl->lambdas, name)) != NULL) {
+        cl->stack[cl->depth].lambda_ctx.item = cl->stack[0].root;
+        cl->stack[cl->depth].lambda_ctx.buf = kore_buf_alloc(128);
+        cl->stack[cl->depth].lambda_ctx.cb = lambda->cb;
+        return (1);
+    }
+
     cl->depth--;
     return (0);
 }
@@ -203,26 +208,22 @@ int
 leave(void *closure)
 {
     struct closure  *cl = closure;
-    struct kore_buf *lambda_ctx;
-    const char      *lambda_name;
-    int             depth;
-
-    lambda_ctx = cl->stack[cl->depth].lambda_ctx;
-    lambda_name = cl->stack[cl->depth].lambda_name;
+    struct stack    *st = &cl->stack[cl->depth];
+    int depth;
 
     cl->context = cl->stack[cl->depth].root;
     if (--cl->depth < 0)
         return (MUSTACH_ERROR_CLOSING);
 
-    if (lambda_ctx != NULL) {
-        run_lambda(cl, lambda_name, lambda_ctx);
+    if (st->lambda_ctx.cb != NULL) {
+        st->lambda_ctx.cb(st->lambda_ctx.item, st->lambda_ctx.buf);
 
         if ((depth = islambda(cl)))
-            kore_buf_append(cl->stack[depth].lambda_ctx, lambda_ctx->data, lambda_ctx->offset);
+            kore_buf_append(cl->stack[depth].lambda_ctx.buf, st->lambda_ctx.buf->data, st->lambda_ctx.buf->offset);
         else
-            kore_buf_append(cl->result, lambda_ctx->data, lambda_ctx->offset);
+            kore_buf_append(cl->result, st->lambda_ctx.buf->data, st->lambda_ctx.buf->offset);
 
-        kore_buf_free(lambda_ctx);
+        kore_buf_free(st->lambda_ctx.buf);
     }
 
     return (MUSTACH_OK);
@@ -246,6 +247,7 @@ int
 get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 {
     struct closure          *cl = closure;
+    struct lambda           *lambda;
     struct kore_json_item   *item;
     struct kore_buf         tmp;
     enum comp               k;
@@ -269,22 +271,19 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
         return (MUSTACH_OK);
     }
 
-    if (cl->lambdas != NULL &&
-            (item = json_item_in_stack(cl, name, KORE_JSON_TYPE_STRING)) != NULL &&
-            !strcmp(item->data.string, "(=>)"))
-    {
-        kore_buf_init(&tmp, 128);
-        run_lambda(cl, name, &tmp);
-        sbuf->value = (char *)kore_buf_release(&tmp, &sbuf->length);
-        sbuf->freecb = kore_free;
-        return (MUSTACH_OK);
-    }
-
     kore_strlcpy(key, name, sizeof(key));
     keyval(key, &val, &k, cl->flags);
     if ((item = json_item_in_stack(cl, key, KORE_JSON_TYPE_ALL)) != NULL &&
             ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no)) {
         json_tosbuf(item, sbuf);
+        return (MUSTACH_OK);
+    }
+
+    if ((lambda = get_lambda(cl->lambdas, name)) != NULL) {
+        kore_buf_init(&tmp, 128);
+        lambda->cb(cl->stack[0].root, &tmp);
+        sbuf->value = (char *)kore_buf_release(&tmp, &sbuf->length);
+        sbuf->freecb = kore_free;
     }
 
     return (MUSTACH_OK);
@@ -327,7 +326,7 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
     }
 
     if ((depth = islambda(cl)))
-        kore_buf_append(cl->stack[depth].lambda_ctx, tmp.data, tmp.offset);
+        kore_buf_append(cl->stack[depth].lambda_ctx.buf, tmp.data, tmp.offset);
     else
         kore_buf_append(cl->result, tmp.data, tmp.offset);
 
@@ -513,7 +512,7 @@ islambda(struct closure *cl)
 {
     int depth = cl->depth;
 
-    while (depth && cl->stack[depth].lambda_name == NULL)
+    while (depth && cl->stack[depth].lambda_ctx.cb == NULL)
         depth--;
 
     return (depth);
@@ -522,16 +521,12 @@ islambda(struct closure *cl)
 void
 partial_tosbuf(const char *path, struct mustach_sbuf *sbuf)
 {
-    struct kore_server  *srv;
+    struct kore_server srv = { .tls = 1 };
     struct kore_fileref *ref;
     struct stat st;
     int fd;
 
-    if (mustach_srv == NULL ||
-            (srv = kore_server_lookup(mustach_srv)) == NULL)
-        return;
-
-    if ((ref = kore_fileref_get(path, srv->tls)) == NULL) {
+    if ((ref = kore_fileref_get(path, srv.tls)) == NULL) {
         if ((fd = open(path, O_RDONLY | O_NOFOLLOW)) == -1)
             return;
 
@@ -540,7 +535,7 @@ partial_tosbuf(const char *path, struct mustach_sbuf *sbuf)
             return;
         }
 
-        if ((ref = kore_fileref_create(srv, path, fd, st.st_size, &st.st_mtim)) == NULL) {
+        if ((ref = kore_fileref_create(&srv, path, fd, st.st_size, &st.st_mtim)) == NULL) {
             close(fd);
             return;
         }
@@ -564,24 +559,35 @@ releasecb(const char *value, void *closure)
     kore_fileref_release(ref);
 }
 
-void
-run_lambda(struct closure *cl, const char *name, struct kore_buf *buf)
+struct lambda *
+get_lambda(struct lambda *lambdas, const char *name)
 {
-    if (cl->lambdas == NULL)
-        return;
+    int i = 0;
 
-    for (int i = 0; cl->lambdas[i].name != NULL && cl->lambdas[i].cb != NULL; i++) {
-        if (!strcmp(name, cl->lambdas[i].name)) {
-            cl->lambdas[i].cb(cl->context, buf);
-            return;
-        }
-    }
+    if (lambdas == NULL)
+        return (NULL);
+
+    while (lambdas[i].name && strcmp(name, lambdas[i].name)) ++i;
+
+    return (lambdas[i].cb ? &lambdas[i] : NULL);
+}
+
+unsigned long
+hash(const char *str) /* http://www.cse.yorku.ca/~oz/hash.html */
+{
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
 }
 
 int
 kore_mustach_errno(void)
 {
-    return (kore_json_errno() ? kore_json_errno() : mustach_errno);
+    return (mustach_errno);
 }
 
 const char *
@@ -589,7 +595,7 @@ kore_mustach_strerror(void)
 {
     int err;
 
-    if (kore_json_errno())
+    if (mustach_errno == kore_json_errno())
         return (kore_json_strerror());
 
     err = mustach_errno * -1;
@@ -601,47 +607,65 @@ kore_mustach_strerror(void)
 }
 
 int
-kore_mustach_json(const char *server_name, const char *template, struct kore_json_item *json,
-        int flags, struct lambda *lambdas, char **result, size_t *length)
+kore_mustach_json(const char *template, struct kore_json_item *json,
+        int flags, struct lambda *lambdas, struct kore_buf **result)
 {
-    struct mustach_itf itf = {
-        .start = start,
-        .enter = enter,
-        .next = next,
-        .leave = leave,
-        .partial = partial,
-        .get = get,
-        .emit = emit,
-    };
-    struct closure cl = {
-        .lambdas = lambdas,
-        .context = json,
-        .flags = flags,
-    };
+    struct closure  cl = { .context = json, .flags = flags, .lambdas = lambdas };
+    struct kore_buf buf;
+    uint32_t        id;
 
-    mustach_srv = server_name;
-    mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
-    *result = (char *)kore_buf_release(cl.result, length);
+    id = hash(template);
+    if (json != NULL) {
+        kore_buf_init(&buf, 128);
+        kore_json_item_tobuf(json, &buf);
+        id += hash(kore_buf_stringify(&buf, NULL));
+        kore_buf_cleanup(&buf);
+    }
 
-    mustach_srv = NULL;
-    return (!mustach_errno && !kore_json_errno() ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+    mustach_errno = MUSTACH_OK;
+
+    if ((*result = kore_mem_lookup(id)) == NULL) {
+        *result = kore_buf_alloc(4096);
+        kore_mem_tag(*result, id);
+
+        cl.result = *result;
+        mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
+        if (!mustach_errno)
+            mustach_errno = kore_json_errno();
+    }
+
+    return (!mustach_errno ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
 int
-kore_mustach(const char *server_name, const char *template, const char *data,
-        int flags, struct lambda *lambdas, char **result, size_t *length)
+kore_mustach(const char *template, const char *data,
+        int flags, struct lambda *lambdas, struct kore_buf **result)
 {
-    struct kore_json_item *item = NULL;
-    struct kore_json json = { 0 };
-    int rc;
+    struct closure      cl = { .flags = flags, .lambdas = lambdas };
+    struct kore_json    json = {};
+    uint32_t            id;
 
-    if (data != NULL) {
-        kore_json_init(&json, data, strlen(data));
-        if (kore_json_parse(&json))
-            item = json.root;
+    id = (data == NULL) ? hash(template) : hash(template) + hash(data);
+
+    mustach_errno = MUSTACH_OK;
+
+    if ((*result = kore_mem_lookup(id)) == NULL) {
+        *result = kore_buf_alloc(4096);
+        kore_mem_tag(*result, id);
+
+        if (data != NULL) {
+            kore_json_init(&json, data, strlen(data));
+            if (kore_json_parse(&json))
+                cl.context = json.root;
+        }
+
+        cl.result = *result;
+        mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
+        if (!mustach_errno)
+            mustach_errno = kore_json_errno();
+
+        kore_json_cleanup(&json);
     }
 
-    rc = kore_mustach_json(server_name, template, item, flags, lambdas, result, length);
-    kore_json_cleanup(&json);
-    return (rc);
+    return (!mustach_errno ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }

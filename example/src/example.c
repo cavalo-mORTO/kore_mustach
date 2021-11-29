@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <math.h>
 #include <kore/kore.h>
 #include <kore/hooks.h>
 #include <kore/http.h>
@@ -12,9 +13,10 @@ KORE_SECCOMP_FILTER("my_filter",
         KORE_SYSCALL_ALLOW(newfstatat))
 #endif
 
+#include "tinyexpr.h"
 #include "assets.h"
 
-int asset_serve_mustach(struct http_request *, int, const void *, const void *);
+double eval(struct kore_json_item *, const char *);
 
 int hello(struct http_request *);
 int handler(struct http_request *);
@@ -22,17 +24,8 @@ int handler(struct http_request *);
 void upper(struct kore_json_item *, struct kore_buf *);
 void lower(struct kore_json_item *, struct kore_buf *);
 void bold(struct kore_json_item *, struct kore_buf *);
-void topipe(struct kore_json_item *, struct kore_buf *);
 void taxed_value(struct kore_json_item *, struct kore_buf *);
-
-static struct lambda my_lambdas[] = {
-    { "upper", upper },
-    { "lower", lower },
-    { "bold", bold },
-    { "topipe", topipe },
-    { "taxed_value", taxed_value },
-    { NULL, NULL }
-};
+void tinyexpr(struct kore_json_item *, struct kore_buf *);
 
 static struct {
     const char uri;
@@ -50,9 +43,17 @@ static struct {
 int
 handler(struct http_request *req)
 {
+    struct lambda lambdas[4] = {{ "upper", upper }, { "lower", lower }, { "taxed_value", taxed_value }};
+    struct kore_buf *result;
+
     for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
-        if (req->path[strlen(req->path) - 1] == tests[i].uri)
-            return (asset_serve_mustach(req, 200, tests[i].template, tests[i].data));
+        if (req->path[strlen(req->path) - 1] == tests[i].uri) {
+            if (!kore_mustach(tests[i].template, tests[i].data, Mustach_With_AllExtensions, lambdas, &result))
+                kore_log(LOG_NOTICE, kore_mustach_strerror());
+
+            http_response(req, 200, result->data, result->offset);
+            return (KORE_RESULT_OK);
+        }
     }
 
     http_response(req, 404, NULL, 0);
@@ -62,28 +63,21 @@ handler(struct http_request *req)
 int
 hello(struct http_request *req)
 {
-    const char  *json = "{\"hello\": \"hello world\","
-        "\"msg\": \"This is an integration of mustache templates with kore.\","
-        "\"literal\": true,"
-        "\"upper\": \"(=>)\","
-        "\"bold\": \"(=>)\","
-        "\"num\": 234.43}";
+    struct lambda lambdas[3] = {{ "tinyexpr", tinyexpr }, { "bold", bold }};
+    struct kore_buf *result;
+    struct kore_json_item *item = kore_json_create_object(NULL, NULL);
 
-    http_response_header(req, "content-type", "text/html");
-    return (asset_serve_mustach(req, 200, asset_hello_html, json));
-}
+    kore_json_create_string(item, "hello", "hello world");
+    kore_json_create_string(item, "msg", "This is an integration of mustache templates with kore.");
+    kore_json_create_literal(item, "literal", 1);
+    kore_json_create_number(item, "num", 234.43);
 
-int
-asset_serve_mustach(struct http_request *req, int status, const void *template, const void *data)
-{
-    char *result;
-    size_t len;
-
-    if (!kore_mustach("tls", template, data, Mustach_With_AllExtensions, my_lambdas, &result, &len))
+    if (!kore_mustach_json((const char *)asset_hello_html, item, Mustach_With_AllExtensions, lambdas, &result))
         kore_log(LOG_NOTICE, kore_mustach_strerror());
 
-    http_response(req, status, result, len);
-    kore_free(result);
+    http_response_header(req, "content-type", "text/html");
+    http_response(req, 200, result->data, result->offset);
+    kore_json_item_free(item);
     return (KORE_RESULT_OK);
 }
 
@@ -101,28 +95,132 @@ void lower(struct kore_json_item *ctx, struct kore_buf *b)
     for (c = b->data; c < end; c++) *c = tolower(*c);
 }
 
-void topipe(struct kore_json_item *ctx, struct kore_buf *b)
-{
-    kore_buf_replace_string(b, " ", "|", 1);
-}
-
 void taxed_value(struct kore_json_item *ctx, struct kore_buf *b)
 {
     struct kore_json_item *o;
 
+    kore_buf_reset(b);
     if ((o = kore_json_find_integer(ctx, "value")) != NULL)
         kore_buf_appendf(b, "%g", o->data.integer * 0.6);
 }
 
 void bold(struct kore_json_item *ctx, struct kore_buf *b)
 {
-    char *s;
-    size_t len;
-
-    kore_buf_stringify(b, &len);
-    s = kore_strdup((char *)b->data);
+    char *s = kore_strdup(kore_buf_stringify(b, NULL));
 
     kore_buf_reset(b);
     kore_buf_appendf(b, "<b> %s </b>", s);
     kore_free(s);
+}
+
+void tinyexpr(struct kore_json_item *ctx, struct kore_buf *b)
+{
+    char *s = kore_strdup(kore_buf_stringify(b, NULL));
+    double d = eval(ctx, s);
+
+    kore_buf_reset(b);
+    kore_buf_appendf(b, "%g", d);
+    kore_free(s);
+}
+
+struct kore_json_item *
+json_get_item(struct kore_json_item *o, const char *name)
+{
+    struct kore_json_item   *item;
+    uint32_t                type;
+
+    for (type = KORE_JSON_TYPE_OBJECT;
+            type <= KORE_JSON_TYPE_INTEGER_U64; type <<= 1) {
+
+        if ((item = kore_json_find(o, name, type)) != NULL)
+            return (item);
+
+        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
+            return (NULL);
+    }
+
+    return (NULL);
+}
+
+int
+split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
+{
+    int         count;
+    char        **ap;
+
+    if (ele == 0)
+        return (0);
+
+    ap = out;
+    count = 0;
+
+    while (ap < &out[ele - 1]) {
+
+        *ap++ = s;
+        count++;
+
+        if ((s = strpbrk(s, accept)) == NULL)
+            break;
+
+        *s++ = '\0';
+    }
+
+    *ap = NULL;
+    return (count);
+}
+
+double
+eval(struct kore_json_item *item, const char *expression)
+{
+    const char  *accept = "+-*/^%() ";
+    struct kore_json_item *o;
+    double      *d, result;
+    char        **vars_s, *copy;
+    te_variable *vars;
+    te_expr     *expr;
+    int         i, n, len = 128;
+
+    d = kore_calloc(len, sizeof(*d));
+    vars_s = kore_calloc(len, sizeof(*vars_s));
+    vars = kore_calloc(len, sizeof(*vars));
+
+    copy = kore_strdup(expression);
+    len = split_string_pbrk(copy, accept, vars_s, len);
+
+    n = 0;
+    for (i = 0; i < len; i++) {
+        if ((o = json_get_item(item, vars_s[i])) != NULL) {
+            switch (o->type) {
+                case KORE_JSON_TYPE_NUMBER:
+                    d[i] = o->data.number;
+                    break;
+                case KORE_JSON_TYPE_INTEGER:
+                    d[i] = o->data.integer;
+                    break;
+                case KORE_JSON_TYPE_INTEGER_U64:
+                    d[i] = o->data.u64;
+                    break;
+                default:
+                    continue;
+            }
+
+            vars[n].name = vars_s[i];
+            vars[n].address = &d[i];
+            n++;
+        }
+    }
+
+    expr = te_compile(expression, vars, n, 0);
+    if (expr) {
+        result = te_eval(expr);
+        te_free(expr);
+    } else {
+        result = NAN;
+    }
+
+    kore_free(copy);
+    kore_free(d);
+    kore_free(vars);
+    kore_free(vars_s);
+    return (result);
 }

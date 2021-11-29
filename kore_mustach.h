@@ -18,7 +18,7 @@
 #define KORE_MUSTACH_H
 
 /**
- * Flags specific to mustach wrap
+ * Flags specific to mustach
  */
 #define Mustach_With_SingleDot    4     /* obsolete, always set */
 #define Mustach_With_Equal        8
@@ -36,32 +36,29 @@ struct lambda; /* see below */
 /*
  * kore_mustach - Renders the mustache 'template' in 'result' for 'data'.
  *
- * @server_name: the kore_server name needed to include other files, only works with tls enabled. can be NULL
  * @template:   the template string to instanciate
  * @data:       the data string to be parsed as a kore_json object. can be NULL
  * @flags:      the flags passed. @see https://gitlab.com/jobol/mustach#extensions
  * @lambdas:    a null terminated list of lambdas. can be NULL
- * @result:     the pointer receiving the result when 0 is returned
- * @size:       the size of the returned result
+ * @result:     the kore_buf receiving the result. Free it with kore_buf_free(), even in case of error. @see kore_buf.
+ *              If you want to cache the result, don't free it after you're done. @see kore_mem_tag
  *
  * Returns KORE_RESULT_OK in case of success or KORE_RESULT_ERROR in case of error.
  */
-int kore_mustach(const char *server_name, const char *template, const char *data,
-        int flags, struct lambda *lambdas, char **result, size_t *length);
+int kore_mustach(const char *template, const char *data,
+        int flags, struct lambda *lambdas, struct kore_buf **result);
 /*
  * kore_mustach_json - Same as kore_mustach except instead of accepting a json
  *              string it requires a kore_json_item object.
  */
-int kore_mustach_json(const char *server_name, const char *template, struct kore_json_item *json,
-        int flags, struct lambda *lambdas, char **result, size_t *length);
+int kore_mustach_json(const char *template, struct kore_json_item *json,
+        int flags, struct lambda *lambdas, struct kore_buf **result);
 /*
  * struct lambda - Bind a lambda's 'name' to its callback 'cb'.
  *
- * 'ctx' is the kore_json_item context currently being accessed.
+ * 'ctx' is the root kore_json_item.
  * 'buf' contains the content of the lambda. User is free to manipulate the content of 'buf'.
  * 'buf' or its contents must not be freed. @see kore_buf.
- *
- * The lambda must be a string of 'name' that contains only '(=>)' in the hash.
  */
 struct lambda {
     char    *name;

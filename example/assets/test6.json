@@ -1,7 +1,6 @@
 {
   "name": "Chris",
   "value": 10000,
-  "taxed_value": "(=>)",
   "in_ca": true,
   "person": false,
   "repo": [
@@ -19,7 +18,5 @@
   "=equal": "=",
   ":colon": ":",
   ">greater": ">",
-  "~tilde": "~",
-  "upper": "(=>)",
-  "lower": "(=>)"
+  "~tilde": "~"
 }
