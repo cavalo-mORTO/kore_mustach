@@ -43,12 +43,11 @@ static struct {
 int
 handler(struct http_request *req)
 {
-    struct lambda lambdas[4] = {{ "upper", upper }, { "lower", lower }, { "taxed_value", taxed_value }};
     struct kore_buf *result;
 
     for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
         if (req->path[strlen(req->path) - 1] == tests[i].uri) {
-            if (!kore_mustach(tests[i].template, tests[i].data, Mustach_With_AllExtensions, lambdas, &result))
+            if (!kore_mustach(tests[i].template, tests[i].data, Mustach_With_AllExtensions, &result))
                 kore_log(LOG_NOTICE, kore_mustach_strerror());
 
             http_response(req, 200, result->data, result->offset);
@@ -63,7 +62,6 @@ handler(struct http_request *req)
 int
 hello(struct http_request *req)
 {
-    struct lambda lambdas[3] = {{ "tinyexpr", tinyexpr }, { "bold", bold }};
     struct kore_buf *result;
     struct kore_json_item *item = kore_json_create_object(NULL, NULL);
 
@@ -71,8 +69,11 @@ hello(struct http_request *req)
     kore_json_create_string(item, "msg", "This is an integration of mustache templates with kore.");
     kore_json_create_literal(item, "literal", 1);
     kore_json_create_number(item, "num", 234.43);
+    kore_json_create_string(item, "bold", "(=>)");
+    kore_json_create_string(item, "upper", "(=>)");
+    kore_json_create_string(item, "tinyexpr", "(=>)");
 
-    if (!kore_mustach_json((const char *)asset_hello_html, item, Mustach_With_AllExtensions, lambdas, &result))
+    if (!kore_mustach_json((const char *)asset_hello_html, item, Mustach_With_AllExtensions, &result))
         kore_log(LOG_NOTICE, kore_mustach_strerror());
 
     http_response_header(req, "content-type", "text/html");

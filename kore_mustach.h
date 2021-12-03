@@ -31,39 +31,34 @@
 #undef  Mustach_With_AllExtensions
 #define Mustach_With_AllExtensions  511
 
-struct lambda; /* see below */
-
 /*
  * kore_mustach - Renders the mustache 'template' in 'result' for 'data'.
  *
  * @template:   the template string to instanciate
  * @data:       the data string to be parsed as a kore_json object. can be NULL
  * @flags:      the flags passed. @see https://gitlab.com/jobol/mustach#extensions
- * @lambdas:    a null terminated list of lambdas. can be NULL
  * @result:     the kore_buf receiving the result. Free it with kore_buf_free(), even in case of error. @see kore_buf.
  *              If you want to cache the result, don't free it after you're done. @see kore_mem_tag
  *
  * Returns KORE_RESULT_OK in case of success or KORE_RESULT_ERROR in case of error.
  */
-int kore_mustach(const char *template, const char *data,
-        int flags, struct lambda *lambdas, struct kore_buf **result);
+int kore_mustach(const char *template, const char *data, int flags, struct kore_buf **result);
 /*
  * kore_mustach_json - Same as kore_mustach except instead of accepting a json
  *              string it requires a kore_json_item object.
  */
-int kore_mustach_json(const char *template, struct kore_json_item *json,
-        int flags, struct lambda *lambdas, struct kore_buf **result);
+int kore_mustach_json(const char *template, struct kore_json_item *json, int flags, struct kore_buf **result);
+
 /*
- * struct lambda - Bind a lambda's 'name' to its callback 'cb'.
+ * A lambda must be a string consisting only of '(=>)' in the json hash.
  *
- * 'ctx' is the root kore_json_item.
- * 'buf' contains the content of the lambda. User is free to manipulate the content of 'buf'.
- * 'buf' or its contents must not be freed. @see kore_buf.
- */
-struct lambda {
-    char    *name;
-    void    (*cb)(struct kore_json_item *ctx, struct kore_buf *buf);
-};
+ * A lambda prototype is as follows:
+ *      void (*cb)(struct kore_json_item *item, struct kore_buf *buf)
+ * 'item' is the root object.
+ * 'buf' contains the text within the lambda's tags, already rendered.
+ *
+ * The lambda will searched using kore_runtime_getcall(), which uses dlsym(3).
+ * */
 
 /* kore_mustach_errno - Return mustach's error code */
 int kore_mustach_errno(void);
