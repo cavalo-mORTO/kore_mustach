@@ -24,8 +24,6 @@
 #include "mustach.h"
 #include "kore_mustach.h"
 
-#define KORE_JSON_TYPE_ALL	0x007F
-
 static int mustach_errno = 0;
 
 static const char *mustach_errtab[] = {
@@ -75,8 +73,8 @@ static int  get(void *, const char *, struct mustach_sbuf *);
 static int  partial(void *, const char *, struct mustach_sbuf *);
 static int  emit(void *, const char *, size_t, int, FILE *);
 
-static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *, uint32_t);
-static struct kore_json_item    *json_item_in_stack(struct closure *, const char *, uint32_t);
+static struct kore_json_item    *json_get_item(struct kore_json_item *, const char *);
+static struct kore_json_item    *json_item_in_stack(struct closure *, const char *);
 static void                     json_tosbuf(struct kore_json_item *, struct mustach_sbuf *);
 static int                      json_item_islambda(struct kore_json_item *);
 static void                     keyval(char *, char **, enum comp *, int);
@@ -113,8 +111,7 @@ start(void *closure)
         cl->flags |= Mustach_With_Equal;
 
     /* json root must be an object, otherwise there might undefined behavior */
-    if (cl->context != NULL &&
-            cl->context->type != KORE_JSON_TYPE_OBJECT)
+    if (cl->context != NULL && cl->context->type != KORE_JSON_TYPE_OBJECT)
         return (MUSTACH_ERROR_INVALID_ITF);
 
     return (MUSTACH_OK);
@@ -154,8 +151,9 @@ enter(void *closure, const char *name)
 
     kore_strlcpy(key, name, sizeof(key));
     keyval(key, &val, &k, cl->flags);
-    if ((item = json_item_in_stack(cl, key, KORE_JSON_TYPE_ALL)) != NULL) {
+    item = json_item_in_stack(cl, key);
 
+    if (item != NULL) {
         n = TAILQ_FIRST(&item->data.items);
         switch (item->type) {
             case KORE_JSON_TYPE_LITERAL:
@@ -182,10 +180,8 @@ enter(void *closure, const char *name)
                 return (1);
 
             default:
-                if ((val != NULL &&
-                            (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no) {
-                    if (json_item_islambda(item) &&
-                            (rcall = kore_runtime_getcall(key)) != NULL ) {
+                if ((val != NULL && evalcomp(item, val, k)) || k == C_no) {
+                    if (json_item_islambda(item) && (rcall = kore_runtime_getcall(key)) != NULL ) {
                         cl->stack[cl->depth].rcall = rcall;
                         cl->stack[cl->depth].buf = kore_buf_alloc(128);
                     }
@@ -269,11 +265,11 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 
     kore_strlcpy(key, name, sizeof(key));
     keyval(key, &val, &k, cl->flags);
-    if ((item = json_item_in_stack(cl, key, KORE_JSON_TYPE_ALL)) != NULL &&
-            ((val != NULL && (val[0] == '!' ? !evalcomp(item, &val[1], k) : evalcomp(item, val, k))) || k == C_no)) {
+    item = json_item_in_stack(cl, key);
 
-        if (json_item_islambda(item) &&
-                (rcall = kore_runtime_getcall(key)) != NULL) {
+    if (item != NULL && ((val != NULL && evalcomp(item, val, k)) || k == C_no)) {
+
+        if (json_item_islambda(item) && (rcall = kore_runtime_getcall(key)) != NULL) {
             kore_buf_init(&tmp, 128);
             mustach_runtime_execute(rcall->addr, cl->stack[0].root, &tmp);
             sbuf->value = (char *)kore_buf_release(&tmp, &sbuf->length);
@@ -291,13 +287,10 @@ int
 partial(void *closure, const char *name, struct mustach_sbuf *sbuf)
 {
     struct closure          *cl = closure;
-    struct kore_json_item   *item;
+    struct kore_json_item   *item = json_item_in_stack(cl, name);
 
     sbuf->value = "";
-    if (cl->context != NULL && (item = json_item_in_stack(cl, name, KORE_JSON_TYPE_ALL)) != NULL)
-        json_tosbuf(item, sbuf);
-    else
-        partial_tosbuf(name, sbuf);
+    (item != NULL) ? json_tosbuf(item, sbuf) : partial_tosbuf(name, sbuf);
 
     return (MUSTACH_OK);
 }
@@ -334,21 +327,23 @@ emit(void *closure, const char *buffer, size_t size, int escape, FILE *file)
 }
         
 struct kore_json_item *
-json_get_item(struct kore_json_item *o, const char *name, uint32_t typemask)
+json_get_item(struct kore_json_item *o, const char *name)
 {
     struct kore_json_item   *item;
-    uint32_t                type;
+    uint32_t                type = KORE_JSON_TYPE_OBJECT;
 
-    for (type = KORE_JSON_TYPE_OBJECT;
-            type <= KORE_JSON_TYPE_INTEGER_U64; type <<= 1) {
+    if (o == NULL)
+        return (NULL);
 
-        if (typemask & type) {
-            if ((item = kore_json_find(o, name, type)) != NULL)
-                return (item);
+    while (type <= KORE_JSON_TYPE_INTEGER_U64) {
 
-            if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
-                return (NULL);
-        }
+        if ((item = kore_json_find(o, name, type)) != NULL)
+            return (item);
+
+        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
+            return (NULL);
+
+        type = type << 1;
     }
 
     return (NULL);
@@ -382,16 +377,16 @@ json_tosbuf(struct kore_json_item *o, struct mustach_sbuf *sbuf)
 }
 
 struct kore_json_item *
-json_item_in_stack(struct closure *cl, const char *name, uint32_t typemask)
+json_item_in_stack(struct closure *cl, const char *name)
 {
     struct kore_json_item *o;
     int depth;
     
-    if ((o = json_get_item(cl->context, name, typemask)) != NULL)
+    if ((o = json_get_item(cl->context, name)) != NULL)
         return (o);
 
     depth = cl->depth;
-    while (depth && (o = json_get_item(cl->stack[depth].root, name, typemask)) == NULL)
+    while (depth && (o = json_get_item(cl->stack[depth].root, name)) == NULL)
         depth--;
 
     return (o);
@@ -400,8 +395,7 @@ json_item_in_stack(struct closure *cl, const char *name, uint32_t typemask)
 int
 json_item_islambda(struct kore_json_item *item)
 {
-    return (item->type == KORE_JSON_TYPE_STRING &&
-            !strcmp(item->data.string, "(=>)"));
+    return (item->type == KORE_JSON_TYPE_STRING && !strcmp(item->data.string, "(=>)"));
 }
 
 void
@@ -500,17 +494,18 @@ compare(struct kore_json_item *o, const char *value)
 int
 evalcomp(struct kore_json_item *o, const char *value, enum comp k)
 {
-    int c;
+    int c, rc, flip = (value[0] == '!');
 
-    c = compare(o, value);
+    c = compare(o, &value[flip]);
     switch (k) {
-        case C_eq: return (c == 0);
-        case C_lt: return (c < 0);
-        case C_le: return (c <= 0);
-        case C_gt: return (c > 0);
-        case C_ge: return (c >= 0);
+        case C_eq: rc = (c == 0); break;
+        case C_lt: rc = (c < 0); break;
+        case C_le: rc = (c <= 0); break;
+        case C_gt: rc = (c > 0); break;
+        case C_ge: rc = (c >= 0); break;
         default: return (0);
     }
+    return (flip ? !rc : rc);
 }
 
 int
@@ -518,8 +513,7 @@ islambda(struct closure *cl)
 {
     int depth = cl->depth;
 
-    while (depth && cl->stack[depth].rcall == NULL)
-        depth--;
+    while (depth && cl->stack[depth].rcall == NULL) depth--;
 
     return (depth);
 }
@@ -595,14 +589,12 @@ kore_mustach_errno(void)
 const char *
 kore_mustach_strerror(void)
 {
-    int err;
+    size_t err = mustach_errno * -1;
 
     if (mustach_errno == kore_json_errno())
         return (kore_json_strerror());
 
-    err = mustach_errno * -1;
-    if (err >= 0 &&
-            (size_t)err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
+    if (err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
         return (mustach_errtab[err]);
 
     return ("unknown mustach error");
@@ -616,6 +608,8 @@ kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
     struct kore_buf buf;
     uint32_t        id;
 
+    mustach_errno = 0;
+
     id = hash(template);
     if (json != NULL) {
         kore_buf_init(&buf, 128);
@@ -624,19 +618,17 @@ kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
         kore_buf_cleanup(&buf);
     }
 
-    mustach_errno = MUSTACH_OK;
-
     if ((*result = kore_mem_lookup(id)) == NULL) {
         *result = kore_buf_alloc(4096);
         kore_mem_tag(*result, id);
 
         cl.result = *result;
         mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
-        if (!mustach_errno)
+        if (mustach_errno == 0)
             mustach_errno = kore_json_errno();
     }
 
-    return (!mustach_errno ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+    return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
 int
@@ -647,10 +639,9 @@ kore_mustach(const char *template, const char *data, int flags,
     struct kore_json    json = {};
     uint32_t            id;
 
+    mustach_errno = 0;
+
     id = (data == NULL) ? hash(template) : hash(template) + hash(data);
-
-    mustach_errno = MUSTACH_OK;
-
     if ((*result = kore_mem_lookup(id)) == NULL) {
         *result = kore_buf_alloc(4096);
         kore_mem_tag(*result, id);
@@ -663,11 +654,11 @@ kore_mustach(const char *template, const char *data, int flags,
 
         cl.result = *result;
         mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
-        if (!mustach_errno)
+        if (mustach_errno == 0)
             mustach_errno = kore_json_errno();
 
         kore_json_cleanup(&json);
     }
 
-    return (!mustach_errno ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+    return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
