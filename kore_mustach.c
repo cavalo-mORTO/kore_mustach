@@ -181,7 +181,7 @@ enter(void *closure, const char *name)
 
             default:
                 if ((val != NULL && evalcomp(item, val, k)) || k == C_no) {
-                    if (json_item_islambda(item) && (rcall = kore_runtime_getcall(key)) != NULL ) {
+                    if (json_item_islambda(item) && (rcall = kore_runtime_getcall(item->name)) != NULL) {
                         cl->stack[cl->depth].rcall = rcall;
                         cl->stack[cl->depth].buf = kore_buf_alloc(128);
                     }
@@ -269,7 +269,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 
     if (item != NULL && ((val != NULL && evalcomp(item, val, k)) || k == C_no)) {
 
-        if (json_item_islambda(item) && (rcall = kore_runtime_getcall(key)) != NULL) {
+        if (json_item_islambda(item) && (rcall = kore_runtime_getcall(item->name)) != NULL) {
             kore_buf_init(&tmp, 128);
             mustach_runtime_execute(rcall->addr, cl->stack[0].root, &tmp);
             sbuf->value = (char *)kore_buf_release(&tmp, &sbuf->length);
@@ -395,7 +395,7 @@ json_item_in_stack(struct closure *cl, const char *name)
 int
 json_item_islambda(struct kore_json_item *item)
 {
-    return (item->type == KORE_JSON_TYPE_STRING && !strcmp(item->data.string, "(=>)"));
+    return (item->name != NULL && item->type == KORE_JSON_TYPE_STRING && !strcmp(item->data.string, "(=>)"));
 }
 
 void
