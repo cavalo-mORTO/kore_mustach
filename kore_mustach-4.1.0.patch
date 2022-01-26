@@ -1,0 +1,55 @@
+--- /proc/self/fd/11	2022-01-26 18:11:38.153744184 -0100
++++ kore_mustach.c	2022-01-26 18:10:18.497072472 -0100
+@@ -340,9 +340,6 @@
+         if ((item = kore_json_find(o, name, type)) != NULL)
+             return (item);
+ 
+-        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
+-            return (NULL);
+-
+         type = type << 1;
+     }
+ 
+@@ -478,7 +475,7 @@
+ 
+         case KORE_JSON_TYPE_INTEGER:
+             i = kore_strtonum64(value, 1, &err);
+-            return (!err) ? 0 : (o->data.integer > i) - (o->data.integer < i);
++            return (!err) ? 0 : (o->data.s64 > i) - (o->data.s64 < i);
+ 
+         case KORE_JSON_TYPE_INTEGER_U64:
+             u = kore_strtonum64(value, 0, &err);
+@@ -589,10 +586,13 @@
+ const char *
+ kore_mustach_strerror(void)
+ {
++    struct kore_json json = {};
+     size_t err = mustach_errno * -1;
+ 
+-    if (mustach_errno == kore_json_errno())
+-        return (kore_json_strerror());
++    if (mustach_errno > 0) {
++        json.error = mustach_errno;
++        return (kore_json_strerror(&json));
++    }
+ 
+     if (err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
+         return (mustach_errtab[err]);
+@@ -624,8 +624,6 @@
+ 
+         cl.result = *result;
+         mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
+-        if (mustach_errno == 0)
+-            mustach_errno = kore_json_errno();
+     }
+ 
+     return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+@@ -655,7 +653,7 @@
+         cl.result = *result;
+         mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
+         if (mustach_errno == 0)
+-            mustach_errno = kore_json_errno();
++            mustach_errno = json.error;
+ 
+         kore_json_cleanup(&json);
+     }

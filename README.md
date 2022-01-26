@@ -1,13 +1,15 @@
-# Introduction to kore mustach
+# Introduction to kore_mustach
 
-`kore mustach` is a [kore](https://kore.io) integration of the C implementation
+`kore_mustach` is a [kore](https://kore.io) integration of the C implementation
 `mustach` [gitlab](https://gitlab.com/jobol/mustach), of [mustache](http://mustache.github.io "main site for mustache")
 template specification.
 
 Requires kore latest [commit](https://git.kore.io/kore).
 
+Compatible with kore release [tarballs](https://kore.io/source) version >= 4.0.0, if applying the patches.
 
-## Using kore mustach
+
+## Using kore_mustach
 
 The file **mustach.h** is the main documentation. Look at it.
 
@@ -19,7 +21,12 @@ The current source files are:
 - **kore_mustach.c** implementation of mustach with kore
 - **example/** example usage of this implementation
 
-To use this implementation run
+If you're using a kore release tarball, version must be >= 4.0.0, run
+```
+make patch
+```
+
+Install with
 ```
 make install
 ```

@@ -14,6 +14,7 @@ INCLUDEDIR ?= $(PREFIX)/include
 VERSION := $(MAJOR).$(MINOR).$(REVIS)
 SOVER := .$(MAJOR)
 SOVEREV := .$(MAJOR).$(MINOR)
+KORE_VERSION := $(strip $(shell kore -v))
 
 HEADERS = mustach.h kore_mustach.h
 CFLAGS+=-Wall -Wmissing-declarations -Wshadow
@@ -23,6 +24,9 @@ lib_LDFLAGS  = -shared -lm
 lib_objs  = mustach.o kore_mustach.o
 
 all: libmustach.so$(SOVEREV) libkore_mustach.so
+
+patch:
+	test -f kore_mustach-$(KORE_VERSION).patch && patch -u -p0 < kore_mustach-$(KORE_VERSION).patch
 
 install: all
 	install -d $(DESTDIR)$(BINDIR)
