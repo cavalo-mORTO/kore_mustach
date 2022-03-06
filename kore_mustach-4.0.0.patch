@@ -1,6 +1,6 @@
---- /proc/self/fd/11	2022-01-26 17:42:37.973633757 -0100
-+++ kore_mustach.c	2022-01-26 17:38:44.140285533 -0100
-@@ -335,15 +335,12 @@
+--- /proc/self/fd/11	2022-03-06 21:01:28.194491289 -0100
++++ kore_mustach.c	2022-03-06 20:59:44.581152211 -0100
+@@ -333,15 +333,12 @@
      if (o == NULL)
          return (NULL);
  
@@ -18,7 +18,7 @@
      }
  
      return (NULL);
-@@ -467,8 +464,6 @@
+@@ -465,8 +462,6 @@
  compare(struct kore_json_item *o, const char *value)
  {
      double      d;
@@ -27,7 +27,7 @@
      int         err;
  
      switch (o->type) {
-@@ -476,14 +471,6 @@
+@@ -474,14 +469,6 @@
              d = kore_strtodouble(value, DBL_MIN, DBL_MAX, &err);
              return (!err) ? 0 : (o->data.number > d) - (o->data.number < d);
  
@@ -42,46 +42,30 @@
          case KORE_JSON_TYPE_STRING:
              return (strcmp(o->data.string, value));
  
-@@ -589,10 +576,13 @@
- const char *
- kore_mustach_strerror(void)
+@@ -577,9 +564,6 @@
  {
-+    struct kore_json json = {};
      size_t err = mustach_errno * -1;
  
 -    if (mustach_errno == kore_json_errno())
 -        return (kore_json_strerror());
-+    if (mustach_errno > 0) {
-+        json.error = mustach_errno;
-+        return (kore_json_strerror(&json));
-+    }
- 
+-
      if (err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
          return (mustach_errtab[err]);
-@@ -624,8 +614,6 @@
  
-         cl.result = *result;
-         mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
--        if (mustach_errno == 0)
--            mustach_errno = kore_json_errno();
+@@ -595,7 +579,6 @@
+     mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
+ 
+     if (mustach_errno == 0) {
+-        mustach_errno = kore_json_errno();
+         *result = cl.result;
+     } else {
+         kore_buf_free(cl.result);
+@@ -612,7 +595,7 @@
+     struct kore_json json = {};
+ 
+     if (data != NULL) {
+-        kore_json_init(&json, data, strlen(data));
++        kore_json_init(&json, (const uint8_t *)data, strlen(data));
+         kore_json_parse(&json);
      }
  
-     return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
-@@ -647,7 +635,7 @@
-         kore_mem_tag(*result, id);
- 
-         if (data != NULL) {
--            kore_json_init(&json, data, strlen(data));
-+            kore_json_init(&json, (const uint8_t *)data, strlen(data));
-             if (kore_json_parse(&json))
-                 cl.context = json.root;
-         }
-@@ -655,7 +643,7 @@
-         cl.result = *result;
-         mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
-         if (mustach_errno == 0)
--            mustach_errno = kore_json_errno();
-+            mustach_errno = json.error;
- 
-         kore_json_cleanup(&json);
-     }
