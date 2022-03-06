@@ -1,7 +1,6 @@
 #include <ctype.h>
 #include <math.h>
 #include <kore/kore.h>
-#include <kore/hooks.h>
 #include <kore/http.h>
 #include <mustach/mustach.h>
 #include <mustach/kore_mustach.h>
@@ -9,8 +8,7 @@
 #if defined(__linux__)
 #include <kore/seccomp.h>
 
-KORE_SECCOMP_FILTER("my_filter",
-        KORE_SYSCALL_ALLOW(newfstatat))
+KORE_SECCOMP_FILTER("app", KORE_SYSCALL_ALLOW(newfstatat))
 #endif
 
 #include "tinyexpr.h"
@@ -43,7 +41,7 @@ static struct {
 int
 handler(struct http_request *req)
 {
-    struct kore_buf *result;
+    struct kore_buf *result = NULL;
 
     for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
         if (req->path[strlen(req->path) - 1] == tests[i].uri) {
@@ -51,6 +49,7 @@ handler(struct http_request *req)
                 kore_log(LOG_NOTICE, kore_mustach_strerror());
 
             http_response(req, 200, result->data, result->offset);
+            kore_buf_free(result);
             return (KORE_RESULT_OK);
         }
     }
@@ -62,7 +61,7 @@ handler(struct http_request *req)
 int
 hello(struct http_request *req)
 {
-    struct kore_buf *result;
+    struct kore_buf *result = NULL;
     struct kore_json_item *item = kore_json_create_object(NULL, NULL);
 
     kore_json_create_string(item, "hello", "hello world");
@@ -79,6 +78,7 @@ hello(struct http_request *req)
     http_response_header(req, "content-type", "text/html");
     http_response(req, 200, result->data, result->offset);
     kore_json_item_free(item);
+    kore_buf_free(result);
     return (KORE_RESULT_OK);
 }
 

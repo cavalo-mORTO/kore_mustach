@@ -15,12 +15,10 @@
  */
 
 #define _GNU_SOURCE
-#include <math.h>
 #include <float.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <kore/kore.h>
-#include <kore/http.h>
 #include "mustach.h"
 #include "kore_mustach.h"
 
@@ -84,7 +82,6 @@ static int                      islambda(struct closure *);
 static void                     partial_tosbuf(const char *, struct mustach_sbuf *);
 static void                     releasecb(const char *, void *);
 static void                     mustach_runtime_execute(void *, struct kore_json_item *, struct kore_buf *);
-static unsigned long            hash(const char *);
 
 static const struct mustach_itf itf = {
     .start = start,
@@ -103,6 +100,7 @@ start(void *closure)
 
     mustach_errno = 0;
 
+    cl->result = kore_buf_alloc(1024);
     cl->depth = 0;
     cl->stack[cl->depth] = (struct stack){};
     cl->stack[cl->depth].root = cl->context;
@@ -568,18 +566,6 @@ mustach_runtime_execute(void *addr, struct kore_json_item *item, struct kore_buf
     cb(item, buf);
 }
 
-unsigned long
-hash(const char *str) /* http://www.cse.yorku.ca/~oz/hash.html */
-{
-    unsigned long hash = 5381;
-    int c;
-
-    while ((c = *str++))
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-    return hash;
-}
-
 int
 kore_mustach_errno(void)
 {
@@ -605,27 +591,15 @@ kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
         struct kore_buf **result)
 {
     struct closure  cl = { .context = json, .flags = flags };
-    struct kore_buf buf;
-    uint32_t        id;
 
-    mustach_errno = 0;
+    mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
 
-    id = hash(template);
-    if (json != NULL) {
-        kore_buf_init(&buf, 128);
-        kore_json_item_tobuf(json, &buf);
-        id += hash(kore_buf_stringify(&buf, NULL));
-        kore_buf_cleanup(&buf);
-    }
-
-    if ((*result = kore_mem_lookup(id)) == NULL) {
-        *result = kore_buf_alloc(4096);
-        kore_mem_tag(*result, id);
-
-        cl.result = *result;
-        mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
-        if (mustach_errno == 0)
-            mustach_errno = kore_json_errno();
+    if (mustach_errno == 0) {
+        mustach_errno = kore_json_errno();
+        *result = cl.result;
+    } else {
+        kore_buf_free(cl.result);
+        *result = NULL;
     }
 
     return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
@@ -635,30 +609,15 @@ int
 kore_mustach(const char *template, const char *data, int flags,
         struct kore_buf **result)
 {
-    struct closure      cl = { .flags = flags };
-    struct kore_json    json = {};
-    uint32_t            id;
+    struct kore_json json = {};
 
-    mustach_errno = 0;
-
-    id = (data == NULL) ? hash(template) : hash(template) + hash(data);
-    if ((*result = kore_mem_lookup(id)) == NULL) {
-        *result = kore_buf_alloc(4096);
-        kore_mem_tag(*result, id);
-
-        if (data != NULL) {
-            kore_json_init(&json, data, strlen(data));
-            if (kore_json_parse(&json))
-                cl.context = json.root;
-        }
-
-        cl.result = *result;
-        mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
-        if (mustach_errno == 0)
-            mustach_errno = kore_json_errno();
-
-        kore_json_cleanup(&json);
+    if (data != NULL) {
+        kore_json_init(&json, data, strlen(data));
+        kore_json_parse(&json);
     }
+
+    kore_mustach_json(template, json.root, flags, result);
+    kore_json_cleanup(&json);
 
     return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
