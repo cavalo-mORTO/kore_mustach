@@ -37,7 +37,7 @@
  * @template:   the template string to instanciate
  * @data:       the data string to be parsed as a kore_json object. can be NULL
  * @flags:      the flags passed. @see https://gitlab.com/jobol/mustach#extensions
- * @result:     the kore_buf receiving the result. Free it with kore_buf_free(). @see kore_buf.
+ * @result:     the kore_buf receiving the result. Set to NULL in case of error. Free it with kore_buf_free(). @see kore_buf.
  *
  * Returns KORE_RESULT_OK in case of success or KORE_RESULT_ERROR in case of error.
  */

@@ -32,7 +32,7 @@
 @@ -595,7 +589,6 @@
      mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
  
-     if (mustach_errno == 0) {
+     if (mustach_errno >= 0) {
 -        mustach_errno = kore_json_errno();
          *result = cl.result;
      } else {

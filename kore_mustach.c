@@ -594,7 +594,7 @@ kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
 
     mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
 
-    if (mustach_errno == 0) {
+    if (mustach_errno >= 0) {
         mustach_errno = kore_json_errno();
         *result = cl.result;
     } else {
@@ -602,7 +602,7 @@ kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
         *result = NULL;
     }
 
-    return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+    return (mustach_errno >= 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
 int
@@ -619,5 +619,5 @@ kore_mustach(const char *template, const char *data, int flags,
     kore_mustach_json(template, json.root, flags, result);
     kore_json_cleanup(&json);
 
-    return (mustach_errno == 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
+    return (mustach_errno >= 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }

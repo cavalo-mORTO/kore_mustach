@@ -45,11 +45,14 @@ handler(struct http_request *req)
 
     for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
         if (req->path[strlen(req->path) - 1] == tests[i].uri) {
-            if (!kore_mustach(tests[i].template, tests[i].data, Mustach_With_AllExtensions, &result))
+            if (!kore_mustach(tests[i].template, tests[i].data, Mustach_With_AllExtensions, &result)) {
                 kore_log(LOG_NOTICE, kore_mustach_strerror());
+                http_response(req, 400, kore_mustach_strerror(), strlen(kore_mustach_strerror()));
+            } else {
+                http_response(req, 200, result->data, result->offset);
+                kore_buf_free(result);
+            }
 
-            http_response(req, 200, result->data, result->offset);
-            kore_buf_free(result);
             return (KORE_RESULT_OK);
         }
     }
@@ -72,13 +75,17 @@ hello(struct http_request *req)
     kore_json_create_string(item, "upper", "(=>)");
     kore_json_create_string(item, "tinyexpr", "(=>)");
 
-    if (!kore_mustach_json((const char *)asset_hello_html, item, Mustach_With_AllExtensions, &result))
-        kore_log(LOG_NOTICE, kore_mustach_strerror());
-
     http_response_header(req, "content-type", "text/html");
-    http_response(req, 200, result->data, result->offset);
+
+    if (!kore_mustach_json((const char *)asset_hello_html, item, Mustach_With_AllExtensions, &result)) {
+        kore_log(LOG_NOTICE, kore_mustach_strerror());
+        http_response(req, 400, kore_mustach_strerror(), strlen(kore_mustach_strerror()));
+    } else {
+        http_response(req, 200, result->data, result->offset);
+        kore_buf_free(result);
+    }
+
     kore_json_item_free(item);
-    kore_buf_free(result);
     return (KORE_RESULT_OK);
 }
 
