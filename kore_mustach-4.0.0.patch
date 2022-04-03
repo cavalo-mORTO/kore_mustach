@@ -1,6 +1,6 @@
---- /proc/self/fd/11	2022-03-06 21:01:28.194491289 -0100
-+++ kore_mustach.c	2022-03-06 20:59:44.581152211 -0100
-@@ -333,15 +333,12 @@
+--- /proc/self/fd/11	2022-04-03 16:07:05.312251066 +0000
++++ kore_mustach.c	2022-04-03 16:06:48.148916783 +0000
+@@ -335,15 +335,12 @@
      if (o == NULL)
          return (NULL);
  
@@ -18,7 +18,7 @@
      }
  
      return (NULL);
-@@ -465,8 +462,6 @@
+@@ -467,8 +464,6 @@
  compare(struct kore_json_item *o, const char *value)
  {
      double      d;
@@ -27,7 +27,7 @@
      int         err;
  
      switch (o->type) {
-@@ -474,14 +469,6 @@
+@@ -476,14 +471,6 @@
              d = kore_strtodouble(value, DBL_MIN, DBL_MAX, &err);
              return (!err) ? 0 : (o->data.number > d) - (o->data.number < d);
  
@@ -42,7 +42,7 @@
          case KORE_JSON_TYPE_STRING:
              return (strcmp(o->data.string, value));
  
-@@ -577,9 +564,6 @@
+@@ -579,9 +566,6 @@
  {
      size_t err = mustach_errno * -1;
  
@@ -52,7 +52,7 @@
      if (err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
          return (mustach_errtab[err]);
  
-@@ -595,7 +579,6 @@
+@@ -607,7 +591,6 @@
      mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
  
      if (mustach_errno >= 0) {
@@ -60,12 +60,12 @@
          *result = cl.result;
      } else {
          kore_buf_free(cl.result);
-@@ -612,7 +595,7 @@
-     struct kore_json json = {};
+@@ -626,7 +609,7 @@
+     mustach_errno = 0;
  
      if (data != NULL) {
 -        kore_json_init(&json, data, strlen(data));
 +        kore_json_init(&json, (const uint8_t *)data, strlen(data));
-         kore_json_parse(&json);
+         if (!kore_json_parse(&json))
+             mustach_errno = MUSTACH_ERROR_INVALID_ITF;
      }
- 

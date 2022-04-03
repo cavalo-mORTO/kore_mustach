@@ -36,3 +36,16 @@ and link with -lkore_mustach. Might need to specify -L/usr/local/lib -Wl,-R/usr/
 ## Lambda support
 
 This implementation supports lambdas. Check kore_mustach.h for details.
+
+
+## Sample code
+```c
+struct kore_buf *result = NULL;
+
+if (kore_mustach("hello {{name}}!", "{\"name\": \"kore\"}", Mustach_With_AllExtensions, &result)) {
+    kore_log(LOG_NOTICE, kore_buf_stringify(result, NULL));
+    kore_buf_free(result);
+} else {
+    kore_log(LOG_NOTICE, kore_mustach_strerror());
+}
+```

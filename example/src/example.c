@@ -14,16 +14,16 @@ KORE_SECCOMP_FILTER("app", KORE_SYSCALL_ALLOW(newfstatat))
 #include "tinyexpr.h"
 #include "assets.h"
 
-double eval(struct kore_json_item *, const char *);
+double eval(const char *);
 
 int hello(struct http_request *);
 int handler(struct http_request *);
 
-void upper(struct kore_json_item *, struct kore_buf *);
-void lower(struct kore_json_item *, struct kore_buf *);
-void bold(struct kore_json_item *, struct kore_buf *);
-void taxed_value(struct kore_json_item *, struct kore_buf *);
-void tinyexpr(struct kore_json_item *, struct kore_buf *);
+void upper(struct kore_buf *);
+void lower(struct kore_buf *);
+void bold(struct kore_buf *);
+void taxed_value(struct kore_buf *);
+void tinyexpr(struct kore_buf *);
 
 static struct {
     const char uri;
@@ -76,7 +76,6 @@ hello(struct http_request *req)
     kore_json_create_string(item, "tinyexpr", "(=>)");
 
     http_response_header(req, "content-type", "text/html");
-
     if (!kore_mustach_json((const char *)asset_hello_html, item, Mustach_With_AllExtensions, &result)) {
         kore_log(LOG_NOTICE, kore_mustach_strerror());
         http_response(req, 400, kore_mustach_strerror(), strlen(kore_mustach_strerror()));
@@ -89,30 +88,30 @@ hello(struct http_request *req)
     return (KORE_RESULT_OK);
 }
 
-void upper(struct kore_json_item *ctx, struct kore_buf *b)
+void upper(struct kore_buf *b)
 {
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = toupper(*c);
 }
 
-void lower(struct kore_json_item *ctx, struct kore_buf *b)
+void lower(struct kore_buf *b)
 {
     uint8_t *c, *end = b->data + b->offset;
 
     for (c = b->data; c < end; c++) *c = tolower(*c);
 }
 
-void taxed_value(struct kore_json_item *ctx, struct kore_buf *b)
+void taxed_value(struct kore_buf *b)
 {
     struct kore_json_item *o;
 
     kore_buf_reset(b);
-    if ((o = kore_json_find_integer(ctx, "value")) != NULL)
+    if ((o = kore_mustach_find_json_item("value")) != NULL && o->type == KORE_JSON_TYPE_INTEGER)
         kore_buf_appendf(b, "%g", o->data.integer * 0.6);
 }
 
-void bold(struct kore_json_item *ctx, struct kore_buf *b)
+void bold(struct kore_buf *b)
 {
     char *s = kore_strdup(kore_buf_stringify(b, NULL));
 
@@ -121,33 +120,14 @@ void bold(struct kore_json_item *ctx, struct kore_buf *b)
     kore_free(s);
 }
 
-void tinyexpr(struct kore_json_item *ctx, struct kore_buf *b)
+void tinyexpr(struct kore_buf *b)
 {
     char *s = kore_strdup(kore_buf_stringify(b, NULL));
-    double d = eval(ctx, s);
+    double d = eval(s);
 
     kore_buf_reset(b);
     kore_buf_appendf(b, "%g", d);
     kore_free(s);
-}
-
-struct kore_json_item *
-json_get_item(struct kore_json_item *o, const char *name)
-{
-    struct kore_json_item   *item;
-    uint32_t                type;
-
-    for (type = KORE_JSON_TYPE_OBJECT;
-            type <= KORE_JSON_TYPE_INTEGER_U64; type <<= 1) {
-
-        if ((item = kore_json_find(o, name, type)) != NULL)
-            return (item);
-
-        if (kore_json_errno() != KORE_JSON_ERR_TYPE_MISMATCH)
-            return (NULL);
-    }
-
-    return (NULL);
 }
 
 int
@@ -178,7 +158,7 @@ split_string_pbrk(char *s, const char *accept, char **out, size_t ele)
 }
 
 double
-eval(struct kore_json_item *item, const char *expression)
+eval(const char *expression)
 {
     const char  *accept = "+-*/^%() ";
     struct kore_json_item *o;
@@ -197,7 +177,7 @@ eval(struct kore_json_item *item, const char *expression)
 
     n = 0;
     for (i = 0; i < len; i++) {
-        if ((o = json_get_item(item, vars_s[i])) != NULL) {
+        if ((o = kore_mustach_find_json_item(vars_s[i])) != NULL) {
             switch (o->type) {
                 case KORE_JSON_TYPE_NUMBER:
                     d[i] = o->data.number;

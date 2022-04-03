@@ -1,6 +1,6 @@
---- /proc/self/fd/11	2022-03-06 21:21:35.461224883 -0100
-+++ kore_mustach.c	2022-03-06 21:21:01.941223025 -0100
-@@ -338,9 +338,6 @@
+--- /proc/self/fd/11	2022-04-03 16:11:10.178931262 +0000
++++ kore_mustach.c	2022-04-03 16:10:52.188930266 +0000
+@@ -340,9 +340,6 @@
          if ((item = kore_json_find(o, name, type)) != NULL)
              return (item);
  
@@ -10,7 +10,7 @@
          type = type << 1;
      }
  
-@@ -476,7 +473,7 @@
+@@ -478,7 +475,7 @@
  
          case KORE_JSON_TYPE_INTEGER:
              i = kore_strtonum64(value, 1, &err);
@@ -19,7 +19,7 @@
  
          case KORE_JSON_TYPE_INTEGER_U64:
              u = kore_strtonum64(value, 0, &err);
-@@ -577,9 +574,6 @@
+@@ -579,9 +576,6 @@
  {
      size_t err = mustach_errno * -1;
  
@@ -29,7 +29,7 @@
      if (err < sizeof(mustach_errtab) / sizeof(mustach_errtab[0]))
          return (mustach_errtab[err]);
  
-@@ -595,7 +589,6 @@
+@@ -607,7 +601,6 @@
      mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
  
      if (mustach_errno >= 0) {

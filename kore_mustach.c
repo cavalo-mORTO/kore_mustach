@@ -34,7 +34,7 @@ static const char *mustach_errtab[] = {
     "too many nested items",
     "too few nested items",
     "bad unescape tag",
-    "invalid itf",
+    "invalid itf, possibly malformed json hash",
     "item not found",
     "partial not found",
 };
@@ -63,6 +63,8 @@ struct closure {
     struct stack            stack[MUSTACH_MAX_DEPTH];
 };
 
+static struct closure *global_cl = NULL;
+
 static int  start(void *);
 static int  enter(void *, const char *);
 static int  leave(void *);
@@ -81,7 +83,7 @@ static int                      evalcomp(struct kore_json_item *, const char *, 
 static int                      islambda(struct closure *);
 static void                     partial_tosbuf(const char *, struct mustach_sbuf *);
 static void                     releasecb(const char *, void *);
-static void                     mustach_runtime_execute(void *, struct kore_json_item *, struct kore_buf *);
+static void                     mustach_runtime_execute(void *, struct kore_buf *);
 
 static const struct mustach_itf itf = {
     .start = start,
@@ -205,7 +207,7 @@ leave(void *closure)
         return (MUSTACH_ERROR_CLOSING);
 
     if (prev->rcall != NULL) {
-        mustach_runtime_execute(prev->rcall->addr, cl->stack[0].root, prev->buf);
+        mustach_runtime_execute(prev->rcall->addr, prev->buf);
 
         depth = islambda(cl);
         if (depth)
@@ -269,7 +271,7 @@ get(void *closure, const char *name, struct mustach_sbuf *sbuf)
 
         if (json_item_islambda(item) && (rcall = kore_runtime_getcall(item->name)) != NULL) {
             kore_buf_init(&tmp, 128);
-            mustach_runtime_execute(rcall->addr, cl->stack[0].root, &tmp);
+            mustach_runtime_execute(rcall->addr, &tmp);
             sbuf->value = (char *)kore_buf_release(&tmp, &sbuf->length);
             sbuf->freecb = kore_free;
             kore_free(rcall);
@@ -558,12 +560,12 @@ releasecb(const char *value, void *closure)
 }
 
 void
-mustach_runtime_execute(void *addr, struct kore_json_item *item, struct kore_buf *buf)
+mustach_runtime_execute(void *addr, struct kore_buf *buf)
 {
-    void (*cb)(struct kore_json_item *, struct kore_buf *);
+    void (*cb)(struct kore_buf *);
 
     *(void **)&(cb) = addr;
-    cb(item, buf);
+    cb(buf);
 }
 
 int
@@ -586,12 +588,22 @@ kore_mustach_strerror(void)
     return ("unknown mustach error");
 }
 
+struct kore_json_item *
+kore_mustach_find_json_item(const char *name)
+{
+    if (global_cl == NULL)
+        return (NULL);
+
+    return (json_item_in_stack(global_cl, name));
+}
+
 int
 kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
         struct kore_buf **result)
 {
     struct closure  cl = { .context = json, .flags = flags };
 
+    global_cl = &cl;
     mustach_errno = mustach_file(template, 0, &itf, &cl, flags, 0);
 
     if (mustach_errno >= 0) {
@@ -602,6 +614,7 @@ kore_mustach_json(const char *template, struct kore_json_item *json, int flags,
         *result = NULL;
     }
 
+    global_cl = NULL;
     return (mustach_errno >= 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }
 
@@ -610,14 +623,17 @@ kore_mustach(const char *template, const char *data, int flags,
         struct kore_buf **result)
 {
     struct kore_json json = {};
+    mustach_errno = 0;
 
     if (data != NULL) {
         kore_json_init(&json, data, strlen(data));
-        kore_json_parse(&json);
+        if (!kore_json_parse(&json))
+            mustach_errno = MUSTACH_ERROR_INVALID_ITF;
     }
 
-    kore_mustach_json(template, json.root, flags, result);
-    kore_json_cleanup(&json);
+    if (mustach_errno == 0)
+        kore_mustach_json(template, json.root, flags, result);
 
+    kore_json_cleanup(&json);
     return (mustach_errno >= 0 ? KORE_RESULT_OK : KORE_RESULT_ERROR);
 }

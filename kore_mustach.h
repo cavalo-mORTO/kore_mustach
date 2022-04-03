@@ -52,11 +52,11 @@ int kore_mustach_json(const char *template, struct kore_json_item *json, int fla
  * A lambda must be a string consisting only of '(=>)' in the json hash.
  *
  * A lambda prototype is as follows:
- *      void (*cb)(struct kore_json_item *item, struct kore_buf *buf)
- * 'item' is the root object.
+ *      void (*cb)(struct kore_buf *buf)
  * 'buf' contains the text within the lambda's tags, already rendered.
  *
- * The lambda will searched using kore_runtime_getcall(), which uses dlsym(3).
+ * If you need to look up a kore_json_item in the context use kore_mustach_find_json_item().
+ * The lambda will be searched using kore_runtime_getcall(), which uses dlsym(3).
  * */
 
 /* kore_mustach_errno - Return mustach's error code */
@@ -64,5 +64,8 @@ int kore_mustach_errno(void);
 
 /* kore_mustach_strerror - Return mustach's error as string */
 const char *kore_mustach_strerror(void);
+
+/* kore_mustach_json_find - Find kore_json_item of 'name' */
+struct kore_json_item *kore_mustach_find_json_item(const char *name);
 
 #endif
