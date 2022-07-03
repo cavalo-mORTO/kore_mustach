@@ -16,14 +16,14 @@ SOVER := .$(MAJOR)
 SOVEREV := .$(MAJOR).$(MINOR)
 KORE_VERSION := $(strip $(shell kore -v))
 
-HEADERS = mustach.h kore_mustach.h
+HEADERS = kore_mustach.h
 CFLAGS+=-Wall -Wmissing-declarations -Wshadow
 CFLAGS+=-Wstrict-prototypes -Wmissing-prototypes
 CFLAGS+=-Wpointer-arith -Wcast-qual -Wsign-compare
 lib_LDFLAGS  = -shared -lm
 lib_objs  = mustach.o kore_mustach.o
 
-all: libmustach.so$(SOVEREV) libkore_mustach.so
+all: libkore_mustach.so
 
 patch:
 	test -f kore_mustach-$(KORE_VERSION).patch && patch -u -p0 < kore_mustach-$(KORE_VERSION).patch
@@ -33,26 +33,26 @@ install: all
 	install -d $(DESTDIR)$(LIBDIR)
 	install -d $(DESTDIR)$(INCLUDEDIR)/mustach
 	install -m0644 $(HEADERS)    $(DESTDIR)$(INCLUDEDIR)/mustach
-	install -m0755 libmustach.so* $(DESTDIR)$(LIBDIR)/
-	ln -sf libmustach.so$(SOVEREV) $(DESTDIR)$(LIBDIR)/libmustach.so$(SOVER)
-	ln -sf libmustach.so$(SOVEREV) $(DESTDIR)$(LIBDIR)/libmustach.so
 	install -m0755 libkore_mustach.so $(DESTDIR)$(LIBDIR)/
+	+$(MAKE) -C mustach install
 
 uninstall:
 	rm -f $(DESTDIR)$(LIBDIR)/libmustach.so*
 	rm -f $(DESTDIR)$(LIBDIR)/libkore_mustach.so
 	rm -rf $(DESTDIR)$(INCLUDEDIR)/mustach
+	+$(MAKE) -C mustach uninstall
 
 libkore_mustach.so: $(lib_objs)
 	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libkore_mustach.so $(lib_objs)
 
-libmustach.so$(SOVEREV): mustach.o
-	$(CC) $(LDFLAGS) $(lib_LDFLAGS) -o libmustach.so$(SOVEREV) mustach.o
+mustach.o:
+	+$(MAKE) -C mustach mustach.o
+	ln -sf mustach/mustach.o .
 
-mustach.o:      mustach.h
-kore_mustach.o: mustach.h kore_mustach.h
+kore_mustach.o: kore_mustach.h
 
 clean:
 	rm -f libkore_mustach.so libmustach.so* *.o
+	+$(MAKE) -C mustach clean
 
 .PHONY: install uninstall all clean

@@ -55,7 +55,7 @@ int kore_mustach_json(const char *template, struct kore_json_item *json, int fla
  *      void (*cb)(struct kore_buf *buf)
  * 'buf' contains the text within the lambda's tags, already rendered.
  *
- * If you need to look up a kore_json_item in the context use kore_mustach_find_json_item().
+ * If you need to look up a kore_json_item in the context use kore_mustach_find().
  * The lambda will be searched using kore_runtime_getcall(), which uses dlsym(3).
  * */
 
@@ -65,7 +65,7 @@ int kore_mustach_errno(void);
 /* kore_mustach_strerror - Return mustach's error as string */
 const char *kore_mustach_strerror(void);
 
-/* kore_mustach_json_find - Find kore_json_item of 'name' */
-struct kore_json_item *kore_mustach_find_json_item(const char *name);
+/* kore_mustach_find - Find kore_json_item of 'name' */
+struct kore_json_item *kore_mustach_find(const char *name);
 
 #endif

@@ -107,7 +107,7 @@ void taxed_value(struct kore_buf *b)
     struct kore_json_item *o;
 
     kore_buf_reset(b);
-    if ((o = kore_mustach_find_json_item("value")) != NULL && o->type == KORE_JSON_TYPE_INTEGER)
+    if ((o = kore_mustach_find("value")) != NULL && o->type == KORE_JSON_TYPE_INTEGER)
         kore_buf_appendf(b, "%g", o->data.integer * 0.6);
 }
 
@@ -177,7 +177,7 @@ eval(const char *expression)
 
     n = 0;
     for (i = 0; i < len; i++) {
-        if ((o = kore_mustach_find_json_item(vars_s[i])) != NULL) {
+        if ((o = kore_mustach_find(vars_s[i])) != NULL) {
             switch (o->type) {
                 case KORE_JSON_TYPE_NUMBER:
                     d[i] = o->data.number;

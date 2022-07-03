@@ -19,7 +19,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <kore/kore.h>
-#include "mustach.h"
+#include "mustach/mustach.h"
 #include "kore_mustach.h"
 
 static int mustach_errno = 0;
@@ -589,7 +589,7 @@ kore_mustach_strerror(void)
 }
 
 struct kore_json_item *
-kore_mustach_find_json_item(const char *name)
+kore_mustach_find(const char *name)
 {
     if (global_cl == NULL)
         return (NULL);
